@@ -1,8 +1,7 @@
 const CAT_TRIGGER = "پیش پیش";
-const DUCK_TRIGGER = "کوئک کوئک";
 const CAT_BUTTON = "🐱 پیش پیش";
-const DUCK_BUTTON = "🦆 کوئک کوئک";
 const ANON_BUTTON = "🥷 پیام ناشناس";
+const MEW_STATS_BUTTON = "📊 آمار بی‌مصرف";
 const DAILY_ON_BUTTON = "🔔 فعال کردن میو روزانه";
 const DAILY_OFF_BUTTON = "🔕 قطع میو روزانه";
 const CANCEL_BUTTON = "❌ لغو";
@@ -11,6 +10,10 @@ const USER_KEY_PREFIX = "user:";
 const STARTER_KEY_PREFIX = "starter:";
 const DAILY_KEY_PREFIX = "daily:";
 const STREAK_KEY_PREFIX = "streak:";
+const CAT_STATS_KEY_PREFIX = "catstats:";
+const CAT_BURST_KEY_PREFIX = "catburst:";
+const PARTIAL_PISH_KEY_PREFIX = "partial_pish:";
+const ACHIEVEMENT_KEY_PREFIX = "achievement:";
 const CRON_LAST_KEY = "cron:last";
 const BROADCAST_DRAFT_PREFIX = "broadcast:draft:";
 const ANON_SESSION_PREFIX = "anon_session:";
@@ -23,8 +26,7 @@ const REPLY_ROUTE_TTL = 30 * 24 * 60 * 60;
 const WELCOME_TEXT = `بالاخره پیدات شد 😼
 
 🐱 «پیش پیش» کنی، عکس گربه می‌گیری.
-🦆 «کوئک کوئک» کنی، عکس اردک می‌گیری.
-🎙️ حتی اگه با ویس بگی «پیش پیش» یا «کوئک کوئک»، برات عکس می‌رستم.
+🎙️ حتی اگه با ویس بگی «پیش پیش»، برات عکس می‌رستم.
 🥷 «پیام ناشناس» رو بزن تا حرفت بی‌اسم برسه به امیرآقا.
 
 روزی دو بار هم می‌تونم خودم برات میو بفرستم.
@@ -33,10 +35,9 @@ const WELCOME_TEXT = `بالاخره پیدات شد 😼
 const HELP_TEXT = `راهنما 😼
 
 🐱 پیش پیش — یک عکس گربه
-🦆 کوئک کوئک — یک عکس اردک
 🎙️ ویسِ «پیش پیش» — یک عکس گربه
-🎙️ ویسِ «کوئک کوئک» — یک عکس اردک
-🔥 /streak — دیدن استریک پیش‌پیش
+🔥 /streak — دیدن استریک و لقب
+📊 /mewstats — آمار کاملاً حیاتی و بی‌مصرف
 🥷 پیام ناشناس — فرستادن پیام بی‌اسم برای مدیر
 🔔/🔕 میو روزانه — روشن/خاموش کردن ارسال خودکار
 ❌ لغو — لغو پیام ناشناس`;
@@ -120,8 +121,13 @@ async function handleMessage(message, env) {
     env.ADMIN_CHAT_ID &&
     chatId === String(env.ADMIN_CHAT_ID);
 
+  let visitInfo = null;
   if (isPrivate) {
-    await rememberPrivateUser(message, env);
+    visitInfo = await rememberPrivateUser(message, env);
+  }
+
+  if (isPrivate && !isAdmin && command !== "/start") {
+    await maybeWelcomeBack(chatId, visitInfo, env);
   }
 
   // دستورهای مدیریتی باید قبل از مسیر Reply ناشناس بررسی شوند.
@@ -172,7 +178,7 @@ async function handleMessage(message, env) {
 /stats — آمار کاربران و فعالیت
 /users — لیست کاربران، نام، @username و آخرین فعالیت
 /starters — استارت‌زن‌ها با نام و @username
-/health — سلامت KV، تلگرام، AI، عکس گربه/اردک و Cron
+/health — سلامت KV، تلگرام، AI، گربه و Chance Event و Cron
 /broadcast متن — پیش‌نمایش و تأیید ارسال همگانی
 /broadcast active7 متن — فقط فعال‌های ۷ روز اخیر
 /broadcast daily متن — فقط کسانی که میو روزانه روشن دارند
@@ -208,12 +214,10 @@ async function handleMessage(message, env) {
     }
   }
 
-  // در گروه فقط تریگرهای متنی کار می‌کنند تا هر ویسی برای transcription ارسال نشود.
+  // در گروه فقط «پیش پیش» متنی کار می‌کند تا هر ویسی برای transcription ارسال نشود.
   if (!isPrivate) {
     if (isCatTriggerText(text)) {
       await sendRandomCat(chatId, env);
-    } else if (isDuckTriggerText(text)) {
-      await sendRandomDuck(chatId, env);
     }
 
     return;
@@ -310,6 +314,11 @@ async function handleMessage(message, env) {
     return;
   }
 
+  if (command === "/mewstats" || text === MEW_STATS_BUTTON) {
+    await handleMewStats(chatId, env);
+    return;
+  }
+
   if (command === "/anon") {
     const anonymousText = text
       .replace(/^\/anon(?:@\w+)?\s*/i, "")
@@ -362,13 +371,16 @@ async function handleMessage(message, env) {
     return;
   }
 
+  if (await handleHalfPishPish(chatId, text, env)) {
+    return;
+  }
+
   if (isCatTriggerText(text)) {
     await sendCatForUser(chatId, env);
     return;
   }
 
-  if (isDuckTriggerText(text)) {
-    await sendRandomDuck(chatId, env);
+  if (await handleHiddenEasterEgg(chatId, text, env)) {
     return;
   }
 
@@ -377,11 +389,6 @@ async function handleMessage(message, env) {
 
     if (isCatTriggerText(spokenText)) {
       await sendCatForUser(chatId, env);
-      return;
-    }
-
-    if (isDuckTriggerText(spokenText)) {
-      await sendRandomDuck(chatId, env);
     }
   }
 }
@@ -389,7 +396,7 @@ async function handleMessage(message, env) {
 function mainKeyboard(dailyEnabled) {
   return {
     keyboard: [
-      [{ text: CAT_BUTTON }, { text: DUCK_BUTTON }],
+      [{ text: CAT_BUTTON }, { text: MEW_STATS_BUTTON }],
       [{ text: ANON_BUTTON }],
       [{ text: dailyEnabled ? DAILY_OFF_BUTTON : DAILY_ON_BUTTON }],
     ],
@@ -428,21 +435,33 @@ function cancelKeyboard() {
 async function rememberPrivateUser(message, env) {
   const chatId = String(message.chat.id);
   const key = `${USER_KEY_PREFIX}${chatId}`;
-  const now = new Date().toISOString();
+  const now = new Date();
+  const nowIso = now.toISOString();
   const raw = await env.BOT_KV.get(key);
   const old = parseJsonValue(raw, {});
   const from = message.from || {};
+  const previousLastSeenAt = old.lastSeenAt || null;
 
   const data = {
     chatId,
     firstName: from.first_name || old.firstName || "",
     lastName: from.last_name || old.lastName || "",
     username: from.username || old.username || "",
-    firstSeenAt: old.firstSeenAt || now,
-    lastSeenAt: now,
+    firstSeenAt: old.firstSeenAt || nowIso,
+    lastSeenAt: nowIso,
   };
 
   await env.BOT_KV.put(key, JSON.stringify(data));
+
+  let absenceDays = 0;
+  if (previousLastSeenAt) {
+    const previous = Date.parse(previousLastSeenAt);
+    if (Number.isFinite(previous)) {
+      absenceDays = Math.floor((now.getTime() - previous) / (24 * 60 * 60 * 1000));
+    }
+  }
+
+  return { previousLastSeenAt, absenceDays };
 }
 
 async function markStarter(message, env) {
@@ -755,6 +774,10 @@ async function forgetUser(chatId, env) {
     env.BOT_KV.delete(`${STARTER_KEY_PREFIX}${chatId}`),
     env.BOT_KV.delete(`${DAILY_KEY_PREFIX}${chatId}`),
     env.BOT_KV.delete(`${STREAK_KEY_PREFIX}${chatId}`),
+    env.BOT_KV.delete(`${CAT_STATS_KEY_PREFIX}${chatId}`),
+    env.BOT_KV.delete(`${CAT_BURST_KEY_PREFIX}${chatId}`),
+    env.BOT_KV.delete(`${PARTIAL_PISH_KEY_PREFIX}${chatId}`),
+    env.BOT_KV.delete(`${ACHIEVEMENT_KEY_PREFIX}${chatId}`),
     env.BOT_KV.delete(`${ANON_SESSION_PREFIX}${chatId}`),
     env.BOT_KV.delete(`${ANON_CLOSED_PREFIX}${chatId}`),
   ]);
@@ -1030,12 +1053,12 @@ async function handleHealth(adminChatId, env) {
   // Workers AI binding
   checks.push(`Workers AI: ${env.AI ? "✅" : "❌ Binding AI پیدا نشد"}`);
 
-  // Duck API
+  // Chance-event API (اردک فقط به عنوان اتفاق نادر)
   try {
     const response = await fetch("https://ducks.now/api/v0/random/");
-    checks.push(`Duck API: ${response.ok ? "✅" : `❌ ${response.status}`}`);
+    checks.push(`Chance Event API: ${response.ok ? "✅" : `❌ ${response.status}`}`);
   } catch {
-    checks.push("Duck API: ❌");
+    checks.push("Chance Event API: ❌");
   }
 
   // Cat API
@@ -1363,7 +1386,7 @@ async function handleAdminReply(message, env) {
   if (!targetChatId) {
     await sendText(
       message.chat.id,
-      "مسیر این پیام پیدا نشد. روی خود پیام ناشناس یا پیام راهنمای زیرش ریپلای کن. اگر تازه رسیده، چند ثانیه صبر کن.",
+      "مسیر این پیام پیدا نشد. روی خود پیام ناشناس یا پیام راهنمای زیرش ریپلای کن. اگه تازه رسیده، چند ثانیه دندون رو جیگر بذار.",
       env
     );
 
@@ -1392,7 +1415,7 @@ async function handleAdminReply(message, env) {
 
     await sendText(
       message.chat.id,
-      "فرستادم. حالا صبر کن ببین جواب می‌ده یا نه.",
+      "فرستادم. حالا صبر کن ببین جواب می‌ده یا نه. آخه وقت سر خاروندن نداره.",
       env
     );
   } else {
@@ -1515,6 +1538,156 @@ function dateKeyDiffDays(fromKey, toKey) {
   return Math.round((to - from) / (24 * 60 * 60 * 1000));
 }
 
+function getStreakTitle(count) {
+  const n = Number(count || 0);
+  if (n >= 100) return "دیگه نگرانتم";
+  if (n >= 60) return "مقام عالی‌رتبه میو";
+  if (n >= 30) return "وزیر امور گربه‌ها";
+  if (n >= 14) return "عضو انجمن پیش‌پیش";
+  if (n >= 7) return "گربه‌باز رسمی";
+  if (n >= 3) return "پیش‌پیش‌کار";
+  if (n >= 1) return "تازه‌وارد پیش‌پیش";
+  return "هنوز بدون لقب";
+}
+
+function getLegendaryRank(count) {
+  const n = Number(count || 0);
+  if (n >= 10) return "افسانه‌ی زنده‌ی گربه‌های کمیاب";
+  if (n >= 5) return "نگهبان گربه‌های لجندری";
+  if (n >= 3) return "شکارچی لجندری";
+  if (n >= 1) return "گربه‌شناس افسانه‌ای";
+  return "هنوز هیچ گربه لجندری ندیدی";
+}
+
+function tehranHour(date = new Date()) {
+  const hour = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Tehran",
+    hour: "2-digit",
+    hour12: false,
+  }).format(date);
+  return Number(hour);
+}
+
+function pickRandom(items) {
+  return items[Math.floor(Math.random() * items.length)];
+}
+
+async function getCatStats(chatId, env) {
+  const raw = await env.BOT_KV.get(`${CAT_STATS_KEY_PREFIX}${chatId}`);
+  return parseJsonValue(raw, {}) || {};
+}
+
+async function saveCatStats(chatId, stats, env) {
+  await env.BOT_KV.put(
+    `${CAT_STATS_KEY_PREFIX}${chatId}`,
+    JSON.stringify(stats)
+  );
+  return stats;
+}
+
+async function mutateCatStats(chatId, env, mutator) {
+  const stats = await getCatStats(chatId, env);
+  const next = mutator({ ...stats }) || stats;
+  return saveCatStats(chatId, next, env);
+}
+
+async function unlockAchievement(chatId, id, title, env) {
+  const key = `${ACHIEVEMENT_KEY_PREFIX}${chatId}`;
+  const raw = await env.BOT_KV.get(key);
+  const achievements = parseJsonValue(raw, {}) || {};
+
+  if (achievements[id]) {
+    return false;
+  }
+
+  achievements[id] = new Date().toISOString();
+  await env.BOT_KV.put(key, JSON.stringify(achievements));
+  await sendText(chatId, `🏆 دستاورد مخفی باز شد: ${title}`, env);
+  return true;
+}
+
+async function getAchievementCount(chatId, env) {
+  const raw = await env.BOT_KV.get(`${ACHIEVEMENT_KEY_PREFIX}${chatId}`);
+  const achievements = parseJsonValue(raw, {}) || {};
+  return Object.keys(achievements).length;
+}
+
+async function maybeWelcomeBack(chatId, visitInfo, env) {
+  const days = Number(visitInfo?.absenceDays || 0);
+  if (days < 14) return;
+
+  const messages = [
+    `${days} روز نبودی. گوربابات یادش بود.`,
+    `بالاخره برگشتی. ${days} روزه خبری ازت نبود.`,
+    `${days} روز غیبت؟ باشه. وانمود می‌کنم اهمیت ندادم.`,
+  ];
+
+  await sendText(chatId, pickRandom(messages), env);
+
+  if (days >= 30) {
+    await unlockAchievement(chatId, "return_from_void", "بازگشت از غیبت", env);
+  }
+}
+
+async function registerCatBurst(chatId, env) {
+  const key = `${CAT_BURST_KEY_PREFIX}${chatId}`;
+  const now = Date.now();
+  const raw = await env.BOT_KV.get(key);
+  let state = parseJsonValue(raw, {}) || {};
+
+  if (state.silentNext) {
+    state = { windowStartedAt: now, count: 0, silentNext: false };
+    await env.BOT_KV.put(key, JSON.stringify(state), { expirationTtl: 120 });
+    return "silent";
+  }
+
+  const startedAt = Number(state.windowStartedAt || 0);
+  if (!startedAt || now - startedAt > 60_000) {
+    state = { windowStartedAt: now, count: 0, silentNext: false };
+  }
+
+  state.count = Number(state.count || 0) + 1;
+
+  if (state.count >= 8) {
+    state.silentNext = true;
+    state.count = 0;
+    state.windowStartedAt = now;
+    await env.BOT_KV.put(key, JSON.stringify(state), { expirationTtl: 120 });
+    return "warning";
+  }
+
+  await env.BOT_KV.put(key, JSON.stringify(state), { expirationTtl: 120 });
+  return "ok";
+}
+
+async function recordPishPishRequest(chatId, env) {
+  const today = tehranDateKey();
+  const hour = tehranHour();
+
+  const stats = await mutateCatStats(chatId, env, (old) => {
+    const sameDay = old.dayKey === today;
+    return {
+      ...old,
+      totalPishPish: Number(old.totalPishPish || 0) + 1,
+      dayKey: today,
+      todayPishPish: sameDay ? Number(old.todayPishPish || 0) + 1 : 1,
+      nightPishPish:
+        Number(old.nightPishPish || 0) + (hour >= 2 && hour < 5 ? 1 : 0),
+      lastPishPishAt: new Date().toISOString(),
+    };
+  });
+
+  if (Number(stats.todayPishPish || 0) >= 10) {
+    await unlockAchievement(chatId, "ten_in_a_day", "بیکاری پیشرفته", env);
+  }
+
+  if (hour >= 2 && hour < 5) {
+    await unlockAchievement(chatId, "night_owl", "چرا بیداری؟", env);
+  }
+
+  return { stats, hour };
+}
+
 async function updateCatStreak(chatId, env) {
   const key = `${STREAK_KEY_PREFIX}${chatId}`;
   const today = tehranDateKey();
@@ -1541,39 +1714,274 @@ async function updateCatStreak(chatId, env) {
   return { count, best, changed: true };
 }
 
-async function handleStreakStatus(chatId, env) {
+async function currentCatStreak(chatId, env) {
   const raw = await env.BOT_KV.get(`${STREAK_KEY_PREFIX}${chatId}`);
   const streak = parseJsonValue(raw, null);
+  if (!streak?.count) return { count: 0, best: 0 };
 
-  if (!streak?.count) {
+  const gap = dateKeyDiffDays(streak.lastDate, tehranDateKey());
+  return {
+    count: gap <= 1 ? Number(streak.count || 0) : 0,
+    best: Number(streak.best || streak.count || 0),
+  };
+}
+
+async function maybeAnnounceStreak(chatId, streak, env) {
+  if (!streak.changed) return;
+
+  const title = getStreakTitle(streak.count);
+  await sendText(
+    chatId,
+    `🔥 استریک پیش‌پیش: ${streak.count} روز${streak.count === streak.best ? " 🏆" : ""}\n🎖 لقب: ${title}`,
+    env
+  );
+
+  if (streak.count >= 7) {
+    await unlockAchievement(chatId, "streak_7", "هفت جان", env);
+  }
+  if (streak.count >= 30) {
+    await unlockAchievement(chatId, "streak_30", "وزارت امور گربه‌ها", env);
+  }
+  if (streak.count >= 100) {
+    await unlockAchievement(chatId, "streak_100", "دیگه واقعاً نگرانتم", env);
+  }
+}
+
+async function handleStreakStatus(chatId, env) {
+  const streak = await currentCatStreak(chatId, env);
+
+  if (!streak.count && !streak.best) {
     await sendText(chatId, "هنوز استریک پیش‌پیش نداری 😼", env);
     return;
   }
 
-  const today = tehranDateKey();
-  const gap = dateKeyDiffDays(streak.lastDate, today);
-  const current = gap <= 1 ? streak.count : 0;
-
   await sendText(
     chatId,
-    `🔥 استریک پیش‌پیش: ${current} روز\n🏆 رکورد: ${streak.best || streak.count} روز`,
+    `🔥 استریک پیش‌پیش: ${streak.count} روز\n🏆 رکورد: ${streak.best} روز\n🎖 لقب: ${getStreakTitle(streak.count)}`,
     env
   );
 }
 
-async function sendCatForUser(chatId, env) {
-  const result = await sendRandomCat(chatId, env);
+async function handleMewStats(chatId, env) {
+  const [stats, streak, achievementCount] = await Promise.all([
+    getCatStats(chatId, env),
+    currentCatStreak(chatId, env),
+    getAchievementCount(chatId, env),
+  ]);
 
-  if (result?.ok) {
-    const streak = await updateCatStreak(chatId, env);
-    if (streak.changed) {
-      await sendText(
-        chatId,
-        `🔥 استریک پیش‌پیش: ${streak.count} روز${streak.count === streak.best ? " 🏆" : ""}`,
-        env
-      );
-    }
+  const total = Number(stats.totalPishPish || 0);
+  const irritation = Math.min(99, Math.floor(total / 3) + Number(stats.protests || 0) * 7);
+  const lines = [
+    "📊 آمار کاملاً حیاتی و بی‌مصرف",
+    "",
+    `🐱 پیش‌پیش کل: ${total}`,
+    `🔥 استریک فعلی: ${streak.count} روز`,
+    `🏆 بهترین استریک: ${streak.best} روز`,
+    `🎖 لقب: ${getStreakTitle(streak.count)}`,
+  ];
+
+  // آمار اتفاق‌های مخفی فقط بعد از اولین بار دیده شدن ظاهر می‌شوند.
+  if (Number(stats.legendaryCats || 0) > 0) {
+    lines.push(
+      `✨ گربه لجندری: ${Number(stats.legendaryCats || 0)}`,
+      `👑 رتبه لجندری: ${getLegendaryRank(stats.legendaryCats)}`
+    );
   }
+  if (Number(stats.duckMistakes || 0) > 0) {
+    lines.push(`🦆 اردک اشتباهی: ${Number(stats.duckMistakes || 0)}`);
+  }
+  if (Number(stats.extraCats || 0) > 0) {
+    lines.push(`🐱🐱 گربه اضافه: ${Number(stats.extraCats || 0)}`);
+  }
+  if (Number(stats.sulks || 0) > 0) {
+    lines.push(`😾 دفعات قهر گربه: ${Number(stats.sulks || 0)}`);
+  }
+  if (Number(stats.protests || 0) > 0) {
+    lines.push(`🤐 اعتراض رسمی گوربابات: ${Number(stats.protests || 0)}`);
+  }
+  if (Number(stats.nightPishPish || 0) > 0) {
+    lines.push(`🌙 پیش‌پیش ساعت نامناسب: ${Number(stats.nightPishPish || 0)}`);
+  }
+  if (Number(stats.halfPishPish || 0) > 0) {
+    lines.push(`🧩 پیش‌پیش نصفه: ${Number(stats.halfPishPish || 0)}`);
+  }
+
+  lines.push(
+    `🏅 دستاورد مخفی پیدا شده: ${achievementCount}`,
+    `📉 احتمال اینکه گوربابات ازت خسته شده باشه: ${irritation}%`
+  );
+
+  await sendText(chatId, lines.join("\n"), env);
+}
+
+async function handleHalfPishPish(chatId, text, env) {
+  const normalized = normalizeTriggerText(text);
+  if (normalized !== "پیش") return false;
+
+  const key = `${PARTIAL_PISH_KEY_PREFIX}${chatId}`;
+  const waiting = await env.BOT_KV.get(key);
+
+  await mutateCatStats(chatId, env, (stats) => ({
+    ...stats,
+    halfPishPish: Number(stats.halfPishPish || 0) + 1,
+  }));
+
+  if (!waiting) {
+    await env.BOT_KV.put(key, "1", { expirationTtl: 120 });
+    await sendText(chatId, "یکی دیگه‌ش کو؟", env);
+    return true;
+  }
+
+  await env.BOT_KV.delete(key);
+  await unlockAchievement(chatId, "half_pish", "جمله رو کامل کن", env);
+  await sendCatForUser(chatId, env);
+  return true;
+}
+
+async function handleHiddenEasterEgg(chatId, text, env) {
+  if (!text || text.startsWith("/")) return false;
+  const normalized = normalizeTriggerText(text).toLowerCase();
+  if (!normalized) return false;
+
+  if (normalized === "میو" || normalized === "میو میو") {
+    await sendText(chatId, pickRandom(["خودت میو.", "شنیدم.", "واضح‌تر میو کن."]), env);
+    return true;
+  }
+
+  if (normalized.includes("گوربابات")) {
+    await sendText(chatId, pickRandom(["صدام کردی؟", "هستم. متأسفانه.", "چی شده باز؟"]), env);
+    await unlockAchievement(chatId, "said_name", "اسمش رو صدا زدی", env);
+    return true;
+  }
+
+  if (normalized.includes("سگ")) {
+    await sendText(chatId, "دیگه اسم اون سگو اینجا نبر .", env);
+    await unlockAchievement(chatId, "forbidden_word", "کلمه ممنوعه", env);
+    return true;
+  }
+
+  if (normalized.includes("دوستم داری")) {
+    await sendText(chatId, pickRandom(["سؤال سختیه. بعدی.", "به اندازه کافی که برات گربه بفرستم.", "این مصاحبه‌ست؟"]), env);
+    return true;
+  }
+
+  if (normalized.includes("پیشته")) {
+    await sendText(chatId, "پیشته پیشت.", env);
+    return true;
+  }
+
+  if (normalized.includes("امیرآقا")) {
+    await sendText(chatId, "جان امیرآقا فدات شه.  .", env);
+    return true;
+  }
+
+  return false;
+}
+
+async function maybeSendSpecialHourLine(chatId, hour, env) {
+  let message = "";
+  let chance = 0;
+
+  if (hour >= 2 && hour < 5) {
+    chance = 0.45;
+    message = pickRandom([
+      "این ساعت پیش‌پیش می‌کنی؟ باشه.",
+      "ساعت رو دیدی؟ گربه‌ها خوابن.",
+      "بخواب. این آخریه. شاید.",
+    ]);
+  } else if (hour >= 5 && hour < 8) {
+    chance = 0.2;
+    message = "صبح به این زودی؟ میخوای حلیم بپزی ؟.";
+  } else if (hour >= 23 || hour < 2) {
+    chance = 0.2;
+    message = "آقاجان نصفه شبه ها..";
+  }
+
+  if (message && Math.random() < chance) {
+    await sendText(chatId, message, env);
+  }
+}
+
+async function sendCatForUser(chatId, env) {
+  const burst = await registerCatBurst(chatId, env);
+  const { stats, hour } = await recordPishPishRequest(chatId, env);
+
+  if (burst === "warning") {
+    await mutateCatStats(chatId, env, (old) => ({
+      ...old,
+      protests: Number(old.protests || 0) + 1,
+    }));
+    await sendText(chatId, "کافیه.", env);
+    await unlockAchievement(chatId, "atm_cat", "نوکر بابات غلام سیاه", env);
+    return { ok: true, protest: true };
+  }
+
+  if (burst === "silent") {
+    // سکوت اعتراضی واقعی: این درخواست عمداً هیچ پاسخی نمی‌گیرد.
+    return { ok: true, silent: true };
+  }
+
+  const streak = await updateCatStreak(chatId, env);
+  const roll = Math.random();
+  let result = null;
+
+  if (roll < 0.012) {
+    await mutateCatStats(chatId, env, (old) => ({
+      ...old,
+      legendaryCats: Number(old.legendaryCats || 0) + 1,
+      chanceEvents: Number(old.chanceEvents || 0) + 1,
+    }));
+    const freshStats = await getCatStats(chatId, env);
+    await sendText(
+      chatId,
+      `✨ گربه لجندری پیدا کردی.\n👑 ${getLegendaryRank(freshStats.legendaryCats)}`,
+      env
+    );
+    result = await sendRandomCat(chatId, env);
+    await unlockAchievement(chatId, "legendary_cat", "این یکی معمولی نبود", env);
+  } else if (roll < 0.024) {
+    await mutateCatStats(chatId, env, (old) => ({
+      ...old,
+      duckMistakes: Number(old.duckMistakes || 0) + 1,
+      chanceEvents: Number(old.chanceEvents || 0) + 1,
+    }));
+    await sendText(chatId, "گربه‌هامون حال نداشتن بیان. اردک  فرستادم برات.", env);
+    result = await sendRandomDuck(chatId, env);
+    await unlockAchievement(chatId, "duck_mistake", "عه وا ببخشید دستم خورد", env);
+  } else if (roll < 0.042) {
+    await mutateCatStats(chatId, env, (old) => ({
+      ...old,
+      sulks: Number(old.sulks || 0) + 1,
+      chanceEvents: Number(old.chanceEvents || 0) + 1,
+    }));
+    await sendText(chatId, pickRandom([
+      "گربه قهر کرده. امروز خودش نخواست بیاد.",
+      "نه. خودش گفت نمیام.",
+      "گربه‌ت امروز مرخصیه. مشکلی داری؟.",
+    ]), env);
+    result = { ok: true, sulk: true };
+    await unlockAchievement(chatId, "cat_sulk", "رد شدن توسط گربه", env);
+  } else if (roll < 0.067) {
+    await mutateCatStats(chatId, env, (old) => ({
+      ...old,
+      extraCats: Number(old.extraCats || 0) + 1,
+      chanceEvents: Number(old.chanceEvents || 0) + 1,
+    }));
+    const first = await sendRandomCat(chatId, env);
+    if (first?.ok) {
+      await sleep(250);
+      result = await sendRandomCat(chatId, env);
+      await sendText(chatId, "یکی اضافه افتاد.", env);
+      await unlockAchievement(chatId, "extra_cat", "اضافه‌کاری", env);
+    } else {
+      result = first;
+    }
+  } else {
+    result = await sendRandomCat(chatId, env);
+  }
+
+  await maybeAnnounceStreak(chatId, streak, env);
+  await maybeSendSpecialHourLine(chatId, hour, env);
 
   return result;
 }
@@ -1595,19 +2003,6 @@ function isCatTriggerText(value = "") {
     .trim();
 
   return normalized === CAT_TRIGGER || normalized.includes(CAT_TRIGGER);
-}
-
-function isDuckTriggerText(value = "") {
-  const normalized = normalizeTriggerText(value)
-    .replace(/^🦆\s*/, "")
-    .trim();
-
-  return (
-    normalized === DUCK_TRIGGER ||
-    normalized.includes(DUCK_TRIGGER) ||
-    normalized.includes("کواک کواک") ||
-    normalized.includes("کوک کوک")
-  );
 }
 
 async function transcribeTelegramVoice(voice, env) {
@@ -1650,7 +2045,7 @@ async function transcribeTelegramVoice(voice, env) {
         task: "transcribe",
         language: "fa",
         vad_filter: true,
-        initial_prompt: "گفتار فارسی است. عبارت‌های مهم ممکن است «پیش پیش» یا «کوئک کوئک» باشند.",
+        initial_prompt: "گفتار فارسی است. عبارت مهم ممکن است «پیش پیش» باشد.",
       }
     );
 
@@ -1696,23 +2091,21 @@ async function sendRandomDuck(chatId, env) {
   const duckUrl = await getRandomDuckUrl();
 
   if (!duckUrl) {
-    await sendText(chatId, "اردکه قایم شده 😾 دوباره بزن.", env, {
-      reply_markup: await getMainKeyboard(chatId, env),
-    });
-    return;
+    await sendText(chatId, "اردک جایگزین هم نیومد. این یکی رو بگیر.", env);
+    return sendRandomCat(chatId, env);
   }
 
   const result = await telegram(env, "sendPhoto", {
     chat_id: chatId,
     photo: duckUrl,
-    reply_markup: await getMainKeyboard(chatId, env),
   });
 
   if (!result?.ok) {
-    await sendText(chatId, "اردکه لجبازی کرد 😾 دوباره امتحان کن.", env, {
-      reply_markup: await getMainKeyboard(chatId, env),
-    });
+    await sendText(chatId, "اردک وسط راه منصرف شد. گربه می‌فرستم.", env);
+    return sendRandomCat(chatId, env);
   }
+
+  return result;
 }
 
 async function sendRandomCat(chatId, env, extra = {}) {
