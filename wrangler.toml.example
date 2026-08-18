@@ -1,0 +1,16 @@
+name = "cute-cat-duck-telegram-bot"
+main = "worker.js"
+compatibility_date = "2026-08-18"
+
+# Workers AI binding used for voice transcription.
+[ai]
+binding = "AI"
+
+# Replace the id with your real KV Namespace ID.
+[[kv_namespaces]]
+binding = "BOT_KV"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# Example: 10:00 and 20:00 Tehran time when UTC offset is +03:30.
+[triggers]
+crons = ["30 6 * * *", "30 16 * * *"]
