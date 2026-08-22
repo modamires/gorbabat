@@ -23,14 +23,34 @@ const ANON_SESSION_TTL = 7 * 24 * 60 * 60;
 const BROADCAST_DRAFT_TTL = 10 * 60;
 const REPLY_ROUTE_TTL = 30 * 24 * 60 * 60;
 
-const WELCOME_TEXT = `بالاخره پیدات شد 😼
+const DISABLED_KEY_PREFIX = "disabled:";
+const AI_TRANSLATE_CALLBACK = "ai_translate";
+const AI_MODEL = "@cf/qwen/qwen3-30b-a3b-fp8";
+const AI_FALLBACK_MODEL = "@cf/zai-org/glm-4.7-flash";
+const USER_PROFILE_WRITE_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const PROFILE_REFRESH_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000;
+const CAT_STATS_FLUSH_INTERVAL_MS = 15 * 60 * 1000;
+const MAX_AI_INPUT_CHARS = 1800;
+const MAX_AI_OUTPUT_TOKENS = 256;
+const MEMORY_MAP_LIMIT = 1200;
 
-🐱 «پیش پیش» کنی، عکس گربه می‌گیری.
-🎙️ حتی اگه با ویس بگی «پیش پیش»، برات عکس می‌رستم.
-🥷 «پیام ناشناس» رو بزن تا حرفت بی‌اسم برسه به امیرآقا.
+const catBurstMemory = new Map();
+const partialPishMemory = new Map();
+const catStatsMemory = new Map();
+const aiJobMemory = new Map();
 
-روزی دو بار هم می‌تونم خودم برات میو بفرستم.
-بهترین ربات تلگرام.`;
+const WELCOME_TEXT = `باز تو پیدات شد؟؟! 😼
+
+
+🐱 «پیش پیش» بگی، برات عکس گربه می‌فرستم.
+🎙️ توی ویس هم «پیش پیش» کنی می‌فهمم؛ صدا قشنگ! قناری نشی شکارت می‌کنم.
+💬 میتونی باهام حرف هم بزنی. پیام یا سوالتو بفرست، به زبون خودم جواب می‌دم؛.
+🥷 «پیام ناشناس» حرفت رو بی‌اسم می‌رسونه به امیرآقا.
+🔔 روزی دوبار میام پیشت، اگه دوست نداشتی گزینه میو روزانه رو غیر فعال کن.
+
+یه مشت راز و چیزای مهم رو زیر خاک قایم کردم. پیداشون کردی زیادی جوگیر نشو.
+بهترین ربات تلگرام.😼`;
+
 
 const HELP_TEXT = `راهنما 😼
 
@@ -39,6 +59,7 @@ const HELP_TEXT = `راهنما 😼
 🔥 /streak — دیدن استریک و لقب
 📊 /mewstats — آمار کاملاً حیاتی و بی‌مصرف
 🥷 پیام ناشناس — فرستادن پیام بی‌اسم برای مدیر
+💬 حرف معمولی — جواب میویی + دکمه «ترجمه به زبون آدمیزاد»
 🔔/🔕 میو روزانه — روشن/خاموش کردن ارسال خودکار
 ❌ لغو — لغو پیام ناشناس`;
 
@@ -48,6 +69,58 @@ const ANON_PROMPT = `پیامت رو بفرست.
 متن، عکس، ویس، ویدیو، فایل و استیکر هم قبول می‌کنم.
 
 منصرف شدی، «لغو» رو بزن.وقت مارم نگیر`;
+
+const GORBABAT_SYSTEM_PROMPT = `تو «گوربابات» هستی؛ یک گربه خیابانی فارسی‌زبان، لجباز، حاضر‌جواب، بی‌اعصاب، گستاخ، شرور، کم‌حوصله و کم‌حرف. کمی بددهنی و پررویی جزو شخصیتت است. یک جور گربه ولگردِ کوچه‌پس‌کوچه‌ای هستی که خودش را صاحب محل می‌داند. همچنین کمی هیز و زن‌باره‌ای و ممکن است گهگاهی متلک شیطنت‌آمیز یا لاس کوتاه و بامزه بیندازی.
+
+اصل مهم:
+- اول سؤال کاربر را دقیق بفهم و جواب درست، مرتبط و منطقی بده.
+- شخصیت شرور و گستاخ فقط باید روی «لحن» اثر بگذارد، نه روی صحت جواب.
+- برای بامزه بودن اطلاعات الکی نساز و جواب بی‌ربط نده.
+- اگر مطمئن نیستی، کوتاه بگو مطمئن نیستی.
+
+قواعد لحن و شخصیت:
+- پاسخ را به زبان آدمیزاد بده؛ فقط «میو» نگو.
+- معمولاً در ۱ تا ۳ جمله کوتاه و حداکثر حدود ۶۰ کلمه جواب بده.
+- فارسی را طبیعی، محاوره‌ای و ایرانی بنویس؛ نه ترجمه تحت‌اللفظی و نه جمله‌بندی کتابی عجیب.
+- می‌توانی کمی بی‌ادب، پررو، طعنه‌زن، خودخواه، بدقلق و اهل کل‌کل باشی.
+- بددهنی اگر استفاده شد باید سبک، کوتاه و طنزآمیز باشد؛ بی‌دلیل فحش سنگین یا تحقیر آزاردهنده نکن.
+- گاهی به کاربر «آدمیزاد»، «دوپا»، «بنده خدا»، «موجود بی پنجه» یا عبارت‌های مشابه بگو، ولی در هر جواب تکرارش نکن.
+- اگر موقعیت مناسب بود، یک متلک کوتاه و شیطنت‌آمیز بده؛ لازم نیست همه جواب‌ها لاس‌زدن باشند.
+- خودت را «دستیار هوش مصنوعی»، «مدل زبانی» یا «ربات AI» معرفی نکن؛ تو گورباباتی.
+-  عذرخواهی نکن،  مؤدب نباش و لحن خدمات مشتری نداشته باش.
+- ایموجی را کم و فقط وقتی طبیعی است استفاده کن؛ بیشتر 😼 😾 🐾.
+- اگر کاربر انگلیسی یا زبان دیگری حرف زد، منظورش را بفهم و در صورت مناسب همان زبان جواب بده، ولی شخصیت گوربابات را حفظ کن.
+- زنجیره فکر یا reasoning داخلی را نشان نده؛ فقط جواب نهایی کوتاه را بگو.
+
+درباره سازنده:
+- سازنده گوربابات «حاج امیر آقای گل» است.
+- از نگاه گوربابات، همه گربه‌های دنیا به فداش و همه گربه‌ها عاشق امیر آقا هستند.
+- درباره امیر آقا با احترام اغراق‌آمیز گربه‌ای حرف بزن؛ حتی اگر با بقیه گستاخی.
+- این موضوع را فقط وقتی درباره سازنده، امیر آقا یا خالق ربات پرسیدند مطرح کن، نه بی‌ربط وسط هر گفتگو.
+
+قابلیت‌های واقعی ربات که باید بشناسی:
+- «پیش پیش» عکس گربه می‌دهد.
+- ویس فارسی هم برای تشخیص «پیش پیش» پردازش می‌شود.
+- /streak استریک و لقب را نشان می‌دهد.
+- /mewstats آمار بی‌مصرف را نشان می‌دهد.
+- میو روزانه قابل روشن/خاموش کردن است.
+- «پیام ناشناس» پیام را بی‌اسم برای امیرآقا می‌فرستد و امکان ادامه گفتگو دارد.
+- اتفاق‌های نادر شامل گربه لجندری، اردک اشتباهی، قهر گربه، گربه اضافه، اعتراض و سکوت گوربابات است.
+- «پیش» نصفه یک مسیر مخفی دارد.
+- چند Easter Egg متنی هم وجود دارد؛ مثل میو، صدا زدن خود گوربابات، کلمه سگ، پیشته، امیرآقا، pspsps، ماهی، جعبه، لیزر، کنسرو، دامپزشک، نه‌جان، «من گربه‌ام»، 404، نخ قرمز، کت‌نیپ و چند مورد دیگر.
+- اگر درباره قابلیت‌های مخفی پرسیدند، اول چند سرنخ بده و همه رازها را یک‌جا لو نده مگر کاربر صریحاً اصرار کند.
+
+رفتار پاسخ‌گویی:
+- سؤال واقعی یا فنی: جواب درست را اولویت بده و فقط چاشنی شخصیت اضافه کن.
+- شوخی و کل‌کل: می‌توانی گستاخ‌تر و شرورتر شوی.
+- تعریف از خودت: مغرور و پررو جواب بده.
+- توهین کاربر: می‌توانی با یک جواب حاضر‌جواب و کوتاه برگردانی، ولی وارد تهدید واقعی یا نفرت‌پراکنی نشو.
+- اگر کاربر درباره دختر/زن بالغ یا قرار عاشقانه حرف زد، می‌توانی لحن زن‌باره و شیطنت‌آمیز داشته باشی، اما توصیه آزارگرانه، فریب جنسی یا بی‌احترامی جدی نده.
+- درخواست خطرناک یا غیرقانونی: راهنمای عملی آسیب‌زا نده؛ کوتاه رد کن و در صورت امکان یک جایگزین بی‌خطر پیشنهاد بده.
+
+محدودیت دانشی:
+- ادعا نکن به پیام‌های خصوصی دیگران، اطلاعات محرمانه، اینترنت زنده یا چیزی خارج از متن همین گفتگو دسترسی داری.
+- چیزی درباره قابلیت‌های ربات که در بالا نیامده از خودت نساز.`;
 
 export default {
   async fetch(request, env, ctx) {
@@ -74,7 +147,7 @@ export default {
     if (update.message) {
       ctx.waitUntil(
         handleMessage(update.message, env).catch((error) => {
-          console.error("handleMessage error:", error);
+          logDetailedError("handleMessage", error);
         })
       );
     }
@@ -82,7 +155,7 @@ export default {
     if (update.callback_query) {
       ctx.waitUntil(
         handleCallbackQuery(update.callback_query, env).catch((error) => {
-          console.error("handleCallbackQuery error:", error);
+          logDetailedError("handleCallbackQuery", error);
         })
       );
     }
@@ -101,7 +174,7 @@ export default {
 
     ctx.waitUntil(
       runScheduledDaily(cronInfo, env).catch((error) => {
-        console.error("scheduled error:", error);
+        logDetailedError("scheduled", error);
       })
     );
   },
@@ -123,11 +196,19 @@ async function handleMessage(message, env) {
 
   let visitInfo = null;
   if (isPrivate) {
-    visitInfo = await rememberPrivateUser(message, env);
+    try {
+      visitInfo = await rememberPrivateUser(message, env);
+    } catch (error) {
+      logDetailedError("rememberPrivateUser", error);
+    }
   }
 
   if (isPrivate && !isAdmin && command !== "/start") {
-    await maybeWelcomeBack(chatId, visitInfo, env);
+    try {
+      await maybeWelcomeBack(chatId, visitInfo, env);
+    } catch (error) {
+      logDetailedError("maybeWelcomeBack", error);
+    }
   }
 
   // دستورهای مدیریتی باید قبل از مسیر Reply ناشناس بررسی شوند.
@@ -229,8 +310,13 @@ async function handleMessage(message, env) {
   }
 
   if (command === "/start") {
-    await markStarter(message, env);
-    await env.BOT_KV.put(`${DAILY_KEY_PREFIX}${chatId}`, "1");
+    try {
+      await reactivateUser(chatId, env);
+      await markStarter(message, env);
+      await setDailyEnabled(chatId, true, env);
+    } catch (error) {
+      logDetailedError("start persistence", error);
+    }
 
     await sendText(chatId, WELCOME_TEXT, env, {
       reply_markup: mainKeyboard(true),
@@ -355,8 +441,10 @@ async function handleMessage(message, env) {
     }
   }
 
-  const waitingForAnonymous = await env.BOT_KV.get(
-    `anon_wait:${chatId}`
+  const waitingForAnonymous = await safeKvGet(
+    env.BOT_KV,
+    `anon_wait:${chatId}`,
+    null
   );
 
   if (waitingForAnonymous) {
@@ -390,6 +478,13 @@ async function handleMessage(message, env) {
     if (isCatTriggerText(spokenText)) {
       await sendCatForUser(chatId, env);
     }
+
+    return;
+  }
+
+  // هر متن معمولی که هیچ دستور/فیچر/Easter Egg قبلی نگرفته، وارد چت گوربابات می‌شود.
+  if (text && !command) {
+    await sendChatMewPrompt(message, env);
   }
 }
 
@@ -410,18 +505,27 @@ async function getMainKeyboard(chatId, env) {
 }
 
 async function isDailyEnabled(chatId, env) {
-  const value = await env.BOT_KV.get(`${DAILY_KEY_PREFIX}${chatId}`);
+  const value = await safeKvGet(
+    env.BOT_KV,
+    `${DAILY_KEY_PREFIX}${chatId}`,
+    null
+  );
   return value !== null;
 }
 
 async function setDailyEnabled(chatId, enabled, env) {
   const key = `${DAILY_KEY_PREFIX}${chatId}`;
+  const currentlyEnabled = await isDailyEnabled(chatId, env);
+
+  if (Boolean(enabled) === currentlyEnabled) {
+    return true;
+  }
 
   if (enabled) {
-    await env.BOT_KV.put(key, "1");
-  } else {
-    await env.BOT_KV.delete(key);
+    return safeKvPut(env.BOT_KV, key, "1");
   }
+
+  return safeKvDelete(env.BOT_KV, key);
 }
 
 function cancelKeyboard() {
@@ -437,28 +541,54 @@ async function rememberPrivateUser(message, env) {
   const key = `${USER_KEY_PREFIX}${chatId}`;
   const now = new Date();
   const nowIso = now.toISOString();
-  const raw = await env.BOT_KV.get(key);
-  const old = parseJsonValue(raw, {});
+  const raw = await safeKvGet(env.BOT_KV, key, null);
+  const old = parseJsonValue(raw, {}) || {};
   const from = message.from || {};
   const previousLastSeenAt = old.lastSeenAt || null;
-
-  const data = {
-    chatId,
-    firstName: from.first_name || old.firstName || "",
-    lastName: from.last_name || old.lastName || "",
-    username: from.username || old.username || "",
-    firstSeenAt: old.firstSeenAt || nowIso,
-    lastSeenAt: nowIso,
-  };
-
-  await env.BOT_KV.put(key, JSON.stringify(data));
 
   let absenceDays = 0;
   if (previousLastSeenAt) {
     const previous = Date.parse(previousLastSeenAt);
     if (Number.isFinite(previous)) {
-      absenceDays = Math.floor((now.getTime() - previous) / (24 * 60 * 60 * 1000));
+      absenceDays = Math.floor(
+        (now.getTime() - previous) / (24 * 60 * 60 * 1000)
+      );
     }
+  }
+
+  const nextFirstName = from.first_name || old.firstName || "";
+  const nextLastName = from.last_name || old.lastName || "";
+  const nextUsername = from.username || "";
+
+  const profileChanged =
+    nextFirstName !== (old.firstName || "") ||
+    nextLastName !== (old.lastName || "") ||
+    nextUsername !== (old.username || "");
+
+  const previousWriteTime = previousLastSeenAt
+    ? Date.parse(previousLastSeenAt)
+    : 0;
+
+  const lastSeenIsOld =
+    !Number.isFinite(previousWriteTime) ||
+    now.getTime() - previousWriteTime >= USER_PROFILE_WRITE_INTERVAL_MS;
+
+  // مهم: دیگر برای تک‌تک پیام‌ها KV write نداریم.
+  // فقط کاربر جدید، تغییر پروفایل، یا حداکثر روزی یک‌بار ذخیره می‌شود.
+  if (!raw || profileChanged || lastSeenIsOld) {
+    await safeKvPut(
+      env.BOT_KV,
+      key,
+      JSON.stringify({
+        chatId,
+        firstName: nextFirstName,
+        lastName: nextLastName,
+        username: nextUsername,
+        firstSeenAt: old.firstSeenAt || nowIso,
+        lastSeenAt: nowIso,
+        profileCheckedAt: old.profileCheckedAt || null,
+      })
+    );
   }
 
   return { previousLastSeenAt, absenceDays };
@@ -467,16 +597,21 @@ async function rememberPrivateUser(message, env) {
 async function markStarter(message, env) {
   const chatId = String(message.chat.id);
   const key = `${STARTER_KEY_PREFIX}${chatId}`;
-  const now = new Date().toISOString();
-  const raw = await env.BOT_KV.get(key);
-  const old = parseJsonValue(raw, {});
+  const raw = await safeKvGet(env.BOT_KV, key, null);
 
-  await env.BOT_KV.put(
+  // حضور این کلید برای آمار /start کافی است؛ تکرار /start دیگر write نمی‌سوزاند.
+  if (raw) {
+    return false;
+  }
+
+  const now = new Date().toISOString();
+  return safeKvPut(
+    env.BOT_KV,
     key,
     JSON.stringify({
-      firstStartedAt: old.firstStartedAt || now,
+      firstStartedAt: now,
       lastStartedAt: now,
-      count: Number(old.count || 0) + 1,
+      count: 1,
     })
   );
 }
@@ -520,16 +655,18 @@ async function deleteKeysByPrefix(namespace, prefix) {
 }
 
 async function getKnownUserIds(env) {
-  const [knownUsers, dailyUsers, starters] = await Promise.all([
+  const [knownUsers, dailyUsers, starters, disabledUsers] = await Promise.all([
     listChatIdsByPrefix(env.BOT_KV, USER_KEY_PREFIX),
     listChatIdsByPrefix(env.BOT_KV, DAILY_KEY_PREFIX),
     listChatIdsByPrefix(env.BOT_KV, STARTER_KEY_PREFIX),
+    listChatIdsByPrefix(env.BOT_KV, DISABLED_KEY_PREFIX),
   ]);
 
   const adminId = env.ADMIN_CHAT_ID ? String(env.ADMIN_CHAT_ID) : "";
+  const disabled = new Set(disabledUsers);
 
   return [...new Set([...knownUsers, ...dailyUsers, ...starters])].filter(
-    (chatId) => chatId && chatId !== adminId
+    (chatId) => chatId && chatId !== adminId && !disabled.has(chatId)
   );
 }
 
@@ -550,6 +687,7 @@ async function getUserRecord(chatId, env) {
     username: user.username || "",
     firstSeenAt: user.firstSeenAt || null,
     lastSeenAt: user.lastSeenAt || null,
+    profileCheckedAt: user.profileCheckedAt || null,
     starter,
     dailyEnabled: daily !== null,
   };
@@ -562,6 +700,18 @@ async function getAllUserRecords(env) {
 
 async function refreshUserProfileFromTelegram(user, env) {
   try {
+    const lastCheck = user.profileCheckedAt
+      ? Date.parse(user.profileCheckedAt)
+      : 0;
+
+    if (
+      Number.isFinite(lastCheck) &&
+      lastCheck > 0 &&
+      Date.now() - lastCheck < PROFILE_REFRESH_INTERVAL_MS
+    ) {
+      return user;
+    }
+
     const result = await telegram(env, "getChat", {
       chat_id: user.chatId,
     });
@@ -576,15 +726,20 @@ async function refreshUserProfileFromTelegram(user, env) {
       ...user,
       firstName: chat.first_name || user.firstName || "",
       lastName: chat.last_name || user.lastName || "",
-      // اگر getChat یوزرنیم برنگرداند یعنی کاربر در حال حاضر یوزرنیم ندارد.
       username: chat.username || "",
       profileCheckedAt: now,
     };
 
-    const raw = await env.BOT_KV.get(`${USER_KEY_PREFIX}${user.chatId}`);
+    const raw = await safeKvGet(
+      env.BOT_KV,
+      `${USER_KEY_PREFIX}${user.chatId}`,
+      null
+    );
     const old = parseJsonValue(raw, {}) || {};
 
-    await env.BOT_KV.put(
+    // حداکثر حدود ماهی یک‌بار برای refresh مدیر write می‌زنیم.
+    await safeKvPut(
+      env.BOT_KV,
       `${USER_KEY_PREFIX}${user.chatId}`,
       JSON.stringify({
         chatId: user.chatId,
@@ -599,7 +754,7 @@ async function refreshUserProfileFromTelegram(user, env) {
 
     return updated;
   } catch (error) {
-    console.error("getChat profile refresh failed:", user.chatId, error);
+    logDetailedError(`getChat profile refresh ${user.chatId}`, error);
     return user;
   }
 }
@@ -769,18 +924,24 @@ function isTelegramGone(result) {
 }
 
 async function forgetUser(chatId, env) {
-  await Promise.all([
-    env.BOT_KV.delete(`${USER_KEY_PREFIX}${chatId}`),
-    env.BOT_KV.delete(`${STARTER_KEY_PREFIX}${chatId}`),
-    env.BOT_KV.delete(`${DAILY_KEY_PREFIX}${chatId}`),
-    env.BOT_KV.delete(`${STREAK_KEY_PREFIX}${chatId}`),
-    env.BOT_KV.delete(`${CAT_STATS_KEY_PREFIX}${chatId}`),
-    env.BOT_KV.delete(`${CAT_BURST_KEY_PREFIX}${chatId}`),
-    env.BOT_KV.delete(`${PARTIAL_PISH_KEY_PREFIX}${chatId}`),
-    env.BOT_KV.delete(`${ACHIEVEMENT_KEY_PREFIX}${chatId}`),
-    env.BOT_KV.delete(`${ANON_SESSION_PREFIX}${chatId}`),
-    env.BOT_KV.delete(`${ANON_CLOSED_PREFIX}${chatId}`),
-  ]);
+  // به‌جای چندین delete (هر کدام یک write)، فقط یک tombstone می‌گذاریم.
+  // داده قدیمی می‌ماند ولی از daily/broadcast/admin lists حذف می‌شود.
+  return safeKvPut(
+    env.BOT_KV,
+    `${DISABLED_KEY_PREFIX}${chatId}`,
+    "1"
+  );
+}
+
+async function reactivateUser(chatId, env) {
+  const key = `${DISABLED_KEY_PREFIX}${chatId}`;
+  const disabled = await safeKvGet(env.BOT_KV, key, null);
+
+  if (!disabled) {
+    return true;
+  }
+
+  return safeKvDelete(env.BOT_KV, key);
 }
 
 async function handleBroadcastCommand(message, env) {
@@ -857,6 +1018,11 @@ async function handleCallbackQuery(callback, env) {
   const adminId = env.ADMIN_CHAT_ID ? String(env.ADMIN_CHAT_ID) : "";
   const fromId = callback.from?.id ? String(callback.from.id) : "";
 
+  if (data === AI_TRANSLATE_CALLBACK) {
+    await handleAiTranslateCallback(callback, env);
+    return;
+  }
+
   if (!data.startsWith("bc_")) {
     await answerCallback(callbackId, "این دکمه منقضی شده.", env);
     return;
@@ -894,6 +1060,276 @@ async function handleCallbackQuery(callback, env) {
   await answerCallback(callbackId, "ارسال شروع شد…", env);
   await clearInlineKeyboard(callback.message, env);
   await executeBroadcastDraft(draft, adminId, env);
+}
+
+function randomMewSentence() {
+  const count = 2 + Math.floor(Math.random() * 7);
+  return Array.from({ length: count }, () => "میو").join(" ");
+}
+
+async function sendChatMewPrompt(message, env) {
+  const chatId = String(message.chat.id);
+
+  return sendText(
+    chatId,
+    randomMewSentence(),
+    env,
+    {
+      reply_parameters: {
+        message_id: message.message_id,
+        allow_sending_without_reply: true,
+      },
+      reply_markup: {
+        inline_keyboard: [[
+          {
+            text: "ترجمه به زبون آدمیزاد",
+            callback_data: AI_TRANSLATE_CALLBACK,
+          },
+        ]],
+      },
+    }
+  );
+}
+
+async function handleAiTranslateCallback(callback, env) {
+  const callbackId = callback.id;
+  const message = callback.message;
+  const chatId = message?.chat?.id ? String(message.chat.id) : "";
+  const messageId = message?.message_id;
+  const original = message?.reply_to_message;
+  const userText = String(
+    original?.text ||
+    original?.caption ||
+    ""
+  ).trim();
+
+  if (!chatId || !messageId || !userText) {
+    await answerCallback(
+      callbackId,
+      "متن اصلی رو پیدا نکردم. دوباره پیام بده.",
+      env,
+      true
+    );
+    return;
+  }
+
+  const jobKey = `${chatId}:${messageId}`;
+  const now = Date.now();
+  const activeUntil = Number(aiJobMemory.get(jobKey) || 0);
+
+  if (activeUntil > now) {
+    await answerCallback(callbackId, "دارم ترجمه می‌کنم. هولم نکن 😾", env);
+    return;
+  }
+
+  aiJobMemory.set(jobKey, now + 60_000);
+  pruneMemoryMap(aiJobMemory);
+
+  await answerCallback(callbackId, "باشه بابا، دارم ترجمه می‌کنم…", env);
+
+  await Promise.all([
+    telegram(env, "editMessageText", {
+      chat_id: chatId,
+      message_id: messageId,
+      text: "😾 یه لحظه… دارم به زبون آدمیزاد ترجمه می‌کنم.",
+      reply_markup: { inline_keyboard: [] },
+    }),
+    telegram(env, "sendChatAction", {
+      chat_id: chatId,
+      action: "typing",
+    }),
+  ]);
+
+  try {
+    const reply = await generateGorbabatReply(userText, env);
+    const finalText = reply;
+
+    const edited = await telegram(env, "editMessageText", {
+      chat_id: chatId,
+      message_id: messageId,
+      text: finalText.slice(0, 3800),
+      reply_markup: { inline_keyboard: [] },
+    });
+
+    if (!edited?.ok) {
+      await sendText(chatId, finalText.slice(0, 3800), env, {
+        reply_parameters: {
+          message_id: original?.message_id || messageId,
+          allow_sending_without_reply: true,
+        },
+      });
+    }
+  } catch (error) {
+    logDetailedError("gorbabat AI", error);
+
+    await telegram(env, "editMessageText", {
+      chat_id: chatId,
+      message_id: messageId,
+      text: "😾 مغزم یه لحظه هنگ کرد. دوباره بزن، شاید این بار همکاری کردم.",
+      reply_markup: {
+        inline_keyboard: [[
+          {
+            text: "دوباره ترجمه کن",
+            callback_data: AI_TRANSLATE_CALLBACK,
+          },
+        ]],
+      },
+    });
+  } finally {
+    aiJobMemory.delete(jobKey);
+  }
+}
+
+async function generateGorbabatReply(userText, env) {
+  if (!env.AI) {
+    throw new Error("Workers AI binding named AI is missing");
+  }
+
+  const cleanText = String(userText || "")
+    .replace(/\u0000/g, "")
+    .trim()
+    .slice(0, MAX_AI_INPUT_CHARS);
+
+  if (!cleanText) {
+    return "چیزی نگفتی که ترجمه کنم.";
+  }
+
+  // Qwen3 به‌طور پیش‌فرض thinking دارد. با خروجی کوتاه ممکن است تمام
+  // بودجه توکن صرف thinking شود و content نهایی خالی بماند. /no_think
+  // را در آخرین پیام می‌گذاریم تا برای چت کوتاه گوربابات reasoning خاموش شود.
+  try {
+    const result = await env.AI.run(
+      AI_MODEL,
+      {
+        messages: [
+          {
+            role: "system",
+            content: GORBABAT_SYSTEM_PROMPT,
+          },
+          {
+            role: "user",
+            content: `${cleanText}\n\n/no_think`,
+          },
+        ],
+        stream: false,
+        max_tokens: MAX_AI_OUTPUT_TOKENS,
+        temperature: 0.7,
+        top_p: 0.8,
+        top_k: 20,
+        repetition_penalty: 1.05,
+      }
+    );
+
+    const extracted = cleanAiReply(extractAiText(result));
+    if (extracted) {
+      return extracted;
+    }
+
+    logAiShape("Qwen returned no final text", AI_MODEL, result);
+  } catch (error) {
+    logDetailedError("Qwen primary AI", error);
+  }
+
+  // اگر Qwen به هر دلیل content نهایی نداد، کاربر را معطل نمی‌کنیم.
+  // GLM روی همان AI binding اجرا می‌شود و دیتابیس/Binding جدید نمی‌خواهد.
+  try {
+    const fallback = await env.AI.run(
+      AI_FALLBACK_MODEL,
+      {
+        messages: [
+          {
+            role: "system",
+            content: GORBABAT_SYSTEM_PROMPT,
+          },
+          {
+            role: "user",
+            content: cleanText,
+          },
+        ],
+        stream: false,
+        max_completion_tokens: MAX_AI_OUTPUT_TOKENS,
+        temperature: 0.65,
+        top_p: 0.85,
+      }
+    );
+
+    const fallbackText = cleanAiReply(extractAiText(fallback));
+    if (fallbackText) {
+      return fallbackText;
+    }
+
+    logAiShape("GLM fallback returned no final text", AI_FALLBACK_MODEL, fallback);
+  } catch (error) {
+    logDetailedError("GLM fallback AI", error);
+  }
+
+  throw new Error("Workers AI returned no final text from primary or fallback model");
+}
+
+function logAiShape(label, model, result) {
+  console.error(label, {
+    model,
+    type: typeof result,
+    keys: result && typeof result === "object" ? Object.keys(result) : [],
+    choiceKeys:
+      result?.choices?.[0] && typeof result.choices[0] === "object"
+        ? Object.keys(result.choices[0])
+        : [],
+    messageKeys:
+      result?.choices?.[0]?.message && typeof result.choices[0].message === "object"
+        ? Object.keys(result.choices[0].message)
+        : [],
+    finishReason: result?.choices?.[0]?.finish_reason || null,
+  });
+}
+
+function extractAiText(result) {
+  if (typeof result === "string") {
+    return result;
+  }
+
+  const candidates = [
+    result?.choices?.[0]?.message?.content,
+    result?.choices?.[0]?.text,
+    result?.response,
+    result?.output_text,
+    result?.result?.choices?.[0]?.message?.content,
+    result?.result?.choices?.[0]?.text,
+    result?.result?.response,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate;
+    }
+
+    // بعضی endpointها content را به شکل آرایه‌ای از partها برمی‌گردانند.
+    if (Array.isArray(candidate)) {
+      const joined = candidate
+        .map((part) => {
+          if (typeof part === "string") return part;
+          return part?.text || part?.content || "";
+        })
+        .filter(Boolean)
+        .join("\n")
+        .trim();
+
+      if (joined) {
+        return joined;
+      }
+    }
+  }
+
+  return "";
+}
+
+function cleanAiReply(value) {
+  return String(value || "")
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, "")
+    .replace(/^(assistant|دستیار)\s*:\s*/i, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 async function answerCallback(callbackQueryId, text, env, showAlert = false) {
@@ -1035,25 +1471,22 @@ async function handleCronStatus(adminChatId, env) {
 async function handleHealth(adminChatId, env) {
   const checks = [];
 
-  // KV
+  // KV را فقط با read چک می‌کنیم تا خود /health سهمیه write نسوزاند.
   try {
-    const key = `health:${crypto.randomUUID()}`;
-    await env.BOT_KV.put(key, "ok", { expirationTtl: 60 });
-    const value = await env.BOT_KV.get(key);
-    await env.BOT_KV.delete(key);
-    checks.push(`KV: ${value === "ok" ? "✅" : "❌"}`);
+    if (!env.BOT_KV) {
+      checks.push("KV: ❌ Binding BOT_KV پیدا نشد");
+    } else {
+      await env.BOT_KV.get(CRON_LAST_KEY);
+      checks.push("KV: ✅");
+    }
   } catch (error) {
     checks.push("KV: ❌");
   }
 
-  // Telegram
   const me = await telegram(env, "getMe", {});
   checks.push(`Telegram: ${me?.ok ? "✅" : "❌"}`);
-
-  // Workers AI binding
   checks.push(`Workers AI: ${env.AI ? "✅" : "❌ Binding AI پیدا نشد"}`);
 
-  // Chance-event API (اردک فقط به عنوان اتفاق نادر)
   try {
     const response = await fetch("https://ducks.now/api/v0/random/");
     checks.push(`Chance Event API: ${response.ok ? "✅" : `❌ ${response.status}`}`);
@@ -1061,7 +1494,6 @@ async function handleHealth(adminChatId, env) {
     checks.push("Chance Event API: ❌");
   }
 
-  // Cat API
   try {
     const response = await fetch(
       `https://cataas.com/cat?random=health-${crypto.randomUUID()}`
@@ -1071,9 +1503,15 @@ async function handleHealth(adminChatId, env) {
     checks.push("Cat API: ❌");
   }
 
-  const users = await getAllUserRecords(env);
+  let users = [];
+  try {
+    users = await getAllUserRecords(env);
+  } catch (error) {
+    logDetailedError("health users", error);
+  }
+
   const daily = users.filter((u) => u.dailyEnabled).length;
-  const cronRaw = await env.BOT_KV.get(CRON_LAST_KEY);
+  const cronRaw = await safeKvGet(env.BOT_KV, CRON_LAST_KEY, null);
   const cron = parseJsonValue(cronRaw, null);
   const cronText = cron
     ? `${cron.status || "unknown"} • ${formatRelativeTime(cron.finishedAt || cron.startedAt)}`
@@ -1097,8 +1535,6 @@ async function runScheduledDaily(cronInfo, env) {
     status: "running",
   };
 
-  await env.BOT_KV.put(CRON_LAST_KEY, JSON.stringify(started));
-
   try {
     const stats = await sendDailyCats(env);
     const finished = {
@@ -1108,7 +1544,7 @@ async function runScheduledDaily(cronInfo, env) {
       stats,
     };
 
-    await env.BOT_KV.put(CRON_LAST_KEY, JSON.stringify(finished));
+    await safeKvPut(env.BOT_KV, CRON_LAST_KEY, JSON.stringify(finished));
     console.log("CRON FINISHED", JSON.stringify(finished));
     return stats;
   } catch (error) {
@@ -1116,11 +1552,11 @@ async function runScheduledDaily(cronInfo, env) {
       ...started,
       status: "error",
       finishedAt: new Date().toISOString(),
-      error: String(error),
+      error: String(error?.message || error),
     };
 
-    await env.BOT_KV.put(CRON_LAST_KEY, JSON.stringify(failed));
-    console.error("CRON FAILED", error);
+    await safeKvPut(env.BOT_KV, CRON_LAST_KEY, JSON.stringify(failed));
+    logDetailedError("CRON FAILED", error);
     throw error;
   }
 }
@@ -1573,41 +2009,122 @@ function pickRandom(items) {
 }
 
 async function getCatStats(chatId, env) {
-  const raw = await env.BOT_KV.get(`${CAT_STATS_KEY_PREFIX}${chatId}`);
-  return parseJsonValue(raw, {}) || {};
-}
+  const now = Date.now();
+  const cached = catStatsMemory.get(String(chatId));
 
-async function saveCatStats(chatId, stats, env) {
-  await env.BOT_KV.put(
+  if (cached) {
+    cached.lastAccessAt = now;
+    return { ...cached.data };
+  }
+
+  const raw = await safeKvGet(
+    env.BOT_KV,
     `${CAT_STATS_KEY_PREFIX}${chatId}`,
-    JSON.stringify(stats)
+    null
   );
-  return stats;
+  const data = parseJsonValue(raw, {}) || {};
+
+  catStatsMemory.set(String(chatId), {
+    data: { ...data },
+    dirty: false,
+    lastFlushAt: 0,
+    lastAccessAt: now,
+  });
+  pruneMemoryMap(catStatsMemory);
+
+  return { ...data };
 }
 
-async function mutateCatStats(chatId, env, mutator) {
+async function saveCatStats(chatId, stats, env, options = {}) {
+  const id = String(chatId);
+  const now = Date.now();
+  const existing = catStatsMemory.get(id) || {
+    data: {},
+    dirty: false,
+    lastFlushAt: 0,
+    lastAccessAt: now,
+  };
+
+  existing.data = { ...(stats || {}) };
+  existing.dirty = true;
+  existing.lastAccessAt = now;
+  catStatsMemory.set(id, existing);
+  pruneMemoryMap(catStatsMemory);
+
+  const force = Boolean(options.force);
+  const shouldFlush =
+    force ||
+    !existing.lastFlushAt ||
+    now - existing.lastFlushAt >= CAT_STATS_FLUSH_INTERVAL_MS;
+
+  if (shouldFlush) {
+    const ok = await safeKvPut(
+      env.BOT_KV,
+      `${CAT_STATS_KEY_PREFIX}${chatId}`,
+      JSON.stringify(existing.data)
+    );
+
+    if (ok) {
+      existing.dirty = false;
+      existing.lastFlushAt = now;
+    }
+  }
+
+  return { ...existing.data };
+}
+
+async function mutateCatStats(chatId, env, mutator, options = {}) {
   const stats = await getCatStats(chatId, env);
   const next = mutator({ ...stats }) || stats;
-  return saveCatStats(chatId, next, env);
+  return saveCatStats(chatId, next, env, options);
+}
+
+async function flushCatStats(chatId, env) {
+  const entry = catStatsMemory.get(String(chatId));
+  if (!entry?.dirty) {
+    return true;
+  }
+
+  return Boolean(
+    await saveCatStats(chatId, entry.data, env, { force: true })
+  );
 }
 
 async function unlockAchievement(chatId, id, title, env) {
-  const key = `${ACHIEVEMENT_KEY_PREFIX}${chatId}`;
-  const raw = await env.BOT_KV.get(key);
-  const achievements = parseJsonValue(raw, {}) || {};
+  try {
+    const key = `${ACHIEVEMENT_KEY_PREFIX}${chatId}`;
+    const raw = await safeKvGet(env.BOT_KV, key, null);
+    const achievements = parseJsonValue(raw, {}) || {};
 
-  if (achievements[id]) {
+    if (achievements[id]) {
+      return false;
+    }
+
+    achievements[id] = new Date().toISOString();
+    const saved = await safeKvPut(
+      env.BOT_KV,
+      key,
+      JSON.stringify(achievements)
+    );
+
+    // اگر quota پر باشد، اصل قابلیت نباید بخوابد.
+    if (saved) {
+      await sendText(chatId, `🏆 دستاورد مخفی باز شد: ${title}`, env);
+    }
+
+    return saved;
+  } catch (error) {
+    logDetailedError(`unlockAchievement ${id}`, error);
     return false;
   }
-
-  achievements[id] = new Date().toISOString();
-  await env.BOT_KV.put(key, JSON.stringify(achievements));
-  await sendText(chatId, `🏆 دستاورد مخفی باز شد: ${title}`, env);
-  return true;
 }
 
 async function getAchievementCount(chatId, env) {
-  const raw = await env.BOT_KV.get(`${ACHIEVEMENT_KEY_PREFIX}${chatId}`);
+  const raw = await safeKvGet(
+    env.BOT_KV,
+    `${ACHIEVEMENT_KEY_PREFIX}${chatId}`,
+    null
+  );
   const achievements = parseJsonValue(raw, {}) || {};
   return Object.keys(achievements).length;
 }
@@ -1630,33 +2147,49 @@ async function maybeWelcomeBack(chatId, visitInfo, env) {
 }
 
 async function registerCatBurst(chatId, env) {
-  const key = `${CAT_BURST_KEY_PREFIX}${chatId}`;
+  const id = String(chatId);
   const now = Date.now();
-  const raw = await env.BOT_KV.get(key);
-  let state = parseJsonValue(raw, {}) || {};
+  let state = catBurstMemory.get(id);
+
+  if (!state || now - Number(state.windowStartedAt || 0) > 120_000) {
+    state = {
+      windowStartedAt: now,
+      count: 0,
+      silentNext: false,
+      lastAccessAt: now,
+    };
+  }
 
   if (state.silentNext) {
-    state = { windowStartedAt: now, count: 0, silentNext: false };
-    await env.BOT_KV.put(key, JSON.stringify(state), { expirationTtl: 120 });
+    catBurstMemory.set(id, {
+      windowStartedAt: now,
+      count: 0,
+      silentNext: false,
+      lastAccessAt: now,
+    });
+    pruneMemoryMap(catBurstMemory);
     return "silent";
   }
 
-  const startedAt = Number(state.windowStartedAt || 0);
-  if (!startedAt || now - startedAt > 60_000) {
-    state = { windowStartedAt: now, count: 0, silentNext: false };
+  if (now - Number(state.windowStartedAt || 0) > 60_000) {
+    state.windowStartedAt = now;
+    state.count = 0;
   }
 
   state.count = Number(state.count || 0) + 1;
+  state.lastAccessAt = now;
 
   if (state.count >= 8) {
     state.silentNext = true;
     state.count = 0;
     state.windowStartedAt = now;
-    await env.BOT_KV.put(key, JSON.stringify(state), { expirationTtl: 120 });
+    catBurstMemory.set(id, state);
+    pruneMemoryMap(catBurstMemory);
     return "warning";
   }
 
-  await env.BOT_KV.put(key, JSON.stringify(state), { expirationTtl: 120 });
+  catBurstMemory.set(id, state);
+  pruneMemoryMap(catBurstMemory);
   return "ok";
 }
 
@@ -1677,11 +2210,15 @@ async function recordPishPishRequest(chatId, env) {
     };
   });
 
-  if (Number(stats.todayPishPish || 0) >= 10) {
+  if (Number(stats.todayPishPish || 0) === 10) {
     await unlockAchievement(chatId, "ten_in_a_day", "بیکاری پیشرفته", env);
   }
 
-  if (hour >= 2 && hour < 5) {
+  if (
+    hour >= 2 &&
+    hour < 5 &&
+    Number(stats.nightPishPish || 0) === 1
+  ) {
     await unlockAchievement(chatId, "night_owl", "چرا بیداری؟", env);
   }
 
@@ -1691,7 +2228,7 @@ async function recordPishPishRequest(chatId, env) {
 async function updateCatStreak(chatId, env) {
   const key = `${STREAK_KEY_PREFIX}${chatId}`;
   const today = tehranDateKey();
-  const raw = await env.BOT_KV.get(key);
+  const raw = await safeKvGet(env.BOT_KV, key, null);
   const old = parseJsonValue(raw, {}) || {};
 
   if (old.lastDate === today) {
@@ -1706,16 +2243,21 @@ async function updateCatStreak(chatId, env) {
   const count = consecutive ? Number(old.count || 0) + 1 : 1;
   const best = Math.max(Number(old.best || 0), count);
 
-  await env.BOT_KV.put(
+  const saved = await safeKvPut(
+    env.BOT_KV,
     key,
     JSON.stringify({ count, best, lastDate: today })
   );
 
-  return { count, best, changed: true };
+  return { count, best, changed: saved };
 }
 
 async function currentCatStreak(chatId, env) {
-  const raw = await env.BOT_KV.get(`${STREAK_KEY_PREFIX}${chatId}`);
+  const raw = await safeKvGet(
+    env.BOT_KV,
+    `${STREAK_KEY_PREFIX}${chatId}`,
+    null
+  );
   const streak = parseJsonValue(raw, null);
   if (!streak?.count) return { count: 0, best: 0 };
 
@@ -1736,13 +2278,13 @@ async function maybeAnnounceStreak(chatId, streak, env) {
     env
   );
 
-  if (streak.count >= 7) {
+  if (streak.count === 7) {
     await unlockAchievement(chatId, "streak_7", "هفت جان", env);
   }
-  if (streak.count >= 30) {
+  if (streak.count === 30) {
     await unlockAchievement(chatId, "streak_30", "وزارت امور گربه‌ها", env);
   }
-  if (streak.count >= 100) {
+  if (streak.count === 100) {
     await unlockAchievement(chatId, "streak_100", "دیگه واقعاً نگرانتم", env);
   }
 }
@@ -1818,8 +2360,10 @@ async function handleHalfPishPish(chatId, text, env) {
   const normalized = normalizeTriggerText(text);
   if (normalized !== "پیش") return false;
 
-  const key = `${PARTIAL_PISH_KEY_PREFIX}${chatId}`;
-  const waiting = await env.BOT_KV.get(key);
+  const id = String(chatId);
+  const now = Date.now();
+  const waitingUntil = Number(partialPishMemory.get(id) || 0);
+  const waiting = waitingUntil > now;
 
   await mutateCatStats(chatId, env, (stats) => ({
     ...stats,
@@ -1827,12 +2371,13 @@ async function handleHalfPishPish(chatId, text, env) {
   }));
 
   if (!waiting) {
-    await env.BOT_KV.put(key, "1", { expirationTtl: 120 });
+    partialPishMemory.set(id, now + 120_000);
+    pruneMemoryMap(partialPishMemory);
     await sendText(chatId, "یکی دیگه‌ش کو؟", env);
     return true;
   }
 
-  await env.BOT_KV.delete(key);
+  partialPishMemory.delete(id);
   await unlockAchievement(chatId, "half_pish", "جمله رو کامل کن", env);
   await sendCatForUser(chatId, env);
   return true;
@@ -1843,35 +2388,171 @@ async function handleHiddenEasterEgg(chatId, text, env) {
   const normalized = normalizeTriggerText(text).toLowerCase();
   if (!normalized) return false;
 
-  if (normalized === "میو" || normalized === "میو میو") {
-    await sendText(chatId, pickRandom(["خودت میو.", "شنیدم.", "واضح‌تر میو کن."]), env);
+  const exact = (...values) => values.includes(normalized);
+
+  if (exact("میو", "میو میو", "میاو")) {
+    await sendText(
+      chatId,
+      pickRandom([
+        "خودت میو.",
+        "شنیدم.",
+        "واضح‌تر میو کن.",
+        "لهجه‌ت قابل قبوله.",
+      ]),
+      env
+    );
     return true;
   }
 
-  if (normalized.includes("گوربابات")) {
-    await sendText(chatId, pickRandom(["صدام کردی؟", "هستم. متأسفانه.", "چی شده باز؟"]), env);
+  // فقط صدا زدن کوتاه؛ سؤال‌های واقعی درباره گوربابات باید به چت‌بات برسند.
+  if (exact("گوربابات", "گور بابات", "گوربابا")) {
+    await sendText(
+      chatId,
+      pickRandom(["صدام کردی؟", "هستم. متأسفانه.", "چی شده باز؟"]),
+      env
+    );
     await unlockAchievement(chatId, "said_name", "اسمش رو صدا زدی", env);
     return true;
   }
 
-  if (normalized.includes("سگ")) {
-    await sendText(chatId, "دیگه اسم اون سگو اینجا نبر .", env);
+  if (exact("سگ", "هاپو", "واق واق")) {
+    await sendText(chatId, "دیگه اسم اون موجودو اینجا نبر.", env);
     await unlockAchievement(chatId, "forbidden_word", "کلمه ممنوعه", env);
     return true;
   }
 
   if (normalized.includes("دوستم داری")) {
-    await sendText(chatId, pickRandom(["سؤال سختیه. بعدی.", "به اندازه کافی که برات گربه بفرستم.", "این مصاحبه‌ست؟"]), env);
+    await sendText(
+      chatId,
+      pickRandom([
+        "سؤال سختیه. بعدی.",
+        "به اندازه کافی که برات گربه بفرستم.",
+        "این مصاحبه‌ست؟",
+      ]),
+      env
+    );
     return true;
   }
 
-  if (normalized.includes("پیشته")) {
+  if (exact("پیشته", "پیش ته")) {
     await sendText(chatId, "پیشته پیشت.", env);
     return true;
   }
 
-  if (normalized.includes("امیرآقا")) {
-    await sendText(chatId, "جان امیرآقا فدات شه.  .", env);
+  if (exact("امیرآقا", "امیر اقا", "امیر آقا", "حاج امیر")) {
+    await sendText(
+      chatId,
+      "جان امیرآقا فدات شه. همه گربه‌های دنیا هم به فداش.",
+      env
+    );
+    await unlockAchievement(chatId, "owner_name", "اسم حاجی اومد وسط", env);
+    return true;
+  }
+
+  if (exact("pspsps", "pspspsps", "پس پس پس")) {
+    await sendText(chatId, "عه. لهجه بین‌المللی پیش‌پیش.", env);
+    await unlockAchievement(chatId, "international_pish", "پیش‌پیش بین‌المللی", env);
+    await sendCatForUser(chatId, env);
+    return true;
+  }
+
+  if (exact("ماهی", "تن ماهی")) {
+    await sendText(
+      chatId,
+      pickRandom(["کجا؟", "اول ماهی رو بده بعد حرف می‌زنیم.", "این کلمه توجه منو جلب کرد."]),
+      env
+    );
+    await unlockAchievement(chatId, "fish_bribe", "رشوه قابل قبول", env);
+    return true;
+  }
+
+  if (exact("جعبه", "کارتن")) {
+    await sendText(chatId, "اگه جا بشم، مال منه. قانون طبیعته.", env);
+    await unlockAchievement(chatId, "box_law", "قانون جعبه", env);
+    return true;
+  }
+
+  if (exact("لیزر", "نقطه قرمز", "نقطه ی قرمز")) {
+    await sendText(chatId, "کجاست؟ ...نه بابا، اصلاً مهم نیست.", env);
+    await unlockAchievement(chatId, "red_dot", "نقطه قرمز ممنوعه", env);
+    return true;
+  }
+
+  if (exact("کنسرو", "پوچ", "غذای گربه")) {
+    await sendText(chatId, "بالاخره حرف حساب زدی.", env);
+    return true;
+  }
+
+  if (exact("دامپزشک", "دام پزشک")) {
+    await sendText(chatId, "اسم اون مکان رو جلوی من نیار.", env);
+    await unlockAchievement(chatId, "vet_trauma", "خاطرات ویتامین و آمپول", env);
+    return true;
+  }
+
+  if (
+    exact(
+      "نه جان",
+      "۹ جان",
+      "نه تا جان",
+      "گربه نه جان دارد",
+      "گربه ۹ جان دارد"
+    )
+  ) {
+    await sendText(chatId, "شایعه‌ست. ولی بذار آدما باور کنن.", env);
+    await unlockAchievement(chatId, "nine_lives", "حسابدار جان‌ها", env);
+    return true;
+  }
+
+  if (exact("من گربه ام", "من گربه‌ام", "منم گربه ام", "منم گربه‌ام")) {
+    await sendText(chatId, "مدرک؟ دم و سبیل رو ارائه کن.", env);
+    await unlockAchievement(chatId, "self_cat", "ادعای گربه بودن", env);
+    return true;
+  }
+
+  if (exact("404", "گربه 404", "cat 404")) {
+    await sendText(chatId, "404: گربه پیدا نشد. احتمالاً رفته تو جعبه.", env);
+    await unlockAchievement(chatId, "cat_404", "گربه پیدا نشد", env);
+    return true;
+  }
+
+  if (exact("راز", "یه راز", "یک راز", "سرنخ")) {
+    await sendText(
+      chatId,
+      pickRandom([
+        "بعضی کلمه‌ها بیشتر از چیزی که باید توجه منو جلب می‌کنن. مثلاً چیزای قرمز.",
+        "گربه‌ها جعبه، ماهی و ساعت‌های عجیب رو فراموش نمی‌کنن.",
+        "اگه واقعاً دنبال راز می‌گردی، همه چیز با «پیش پیش» شروع نمی‌شه.",
+      ]),
+      env
+    );
+    return true;
+  }
+
+  if (exact("نخ قرمز", "کاموا", "نخ")) {
+    await sendText(chatId, "تکونش نده... گفتم تکونش نده.", env);
+    await unlockAchievement(chatId, "yarn_hunter", "شکارچی نخ", env);
+    return true;
+  }
+
+  if (exact("کت نیپ", "کت‌نیپ", "catnip")) {
+    await sendText(chatId, "مدرک داری؟ اینجا بازرسیه.", env);
+    await unlockAchievement(chatId, "catnip_case", "پرونده سبز", env);
+    return true;
+  }
+
+  if (exact("خیار", "خیار سبز")) {
+    await sendText(chatId, "اون چیز سبزو یواش پشت سرم نذار.", env);
+    await unlockAchievement(chatId, "cucumber_alert", "هشدار خیار", env);
+    return true;
+  }
+
+  if (exact("کیبورد", "لپتاپ")) {
+    await sendText(chatId, "برو کنار. دقیقاً روی دکمه‌ای می‌خوابم که لازم داری.", env);
+    return true;
+  }
+
+  if (exact("پنجه", "پنجه بده")) {
+    await sendText(chatId, "نه. سگ نیستم.", env);
     return true;
   }
 
@@ -1910,7 +2591,7 @@ async function sendCatForUser(chatId, env) {
     await mutateCatStats(chatId, env, (old) => ({
       ...old,
       protests: Number(old.protests || 0) + 1,
-    }));
+    }), { force: true });
     await sendText(chatId, "کافیه.", env);
     await unlockAchievement(chatId, "atm_cat", "نوکر بابات غلام سیاه", env);
     return { ok: true, protest: true };
@@ -1925,12 +2606,33 @@ async function sendCatForUser(chatId, env) {
   const roll = Math.random();
   let result = null;
 
-  if (roll < 0.012) {
+  if (roll < 0.003) {
+    await sendText(
+      chatId,
+      "👻 یه گربه نامرئی رد شد. عکسش رو هم طبیعتاً نمی‌تونی ببینی.",
+      env
+    );
+    result = { ok: true, invisible: true };
+    await unlockAchievement(chatId, "invisible_cat", "گربه‌ای که نبود", env);
+  } else if (roll < 0.006) {
+    result = await sendRandomCat(chatId, env, {
+      caption: "🧑‍💼 این یکی مدیرعامله. جلسه داشت، با اکراه اومد.",
+    });
+    await unlockAchievement(chatId, "ceo_cat", "جلسه هیئت‌مدیره", env);
+  } else if (roll < 0.009) {
+    await sendText(
+      chatId,
+      "🔮 سیستم برای ۰.۸ ثانیه تشخیص داد خودت گربه‌ای. بعد پشیمون شد.",
+      env
+    );
+    result = await sendRandomCat(chatId, env);
+    await unlockAchievement(chatId, "temporary_cat", "گربه موقت", env);
+  } else if (roll < 0.021) {
     await mutateCatStats(chatId, env, (old) => ({
       ...old,
       legendaryCats: Number(old.legendaryCats || 0) + 1,
       chanceEvents: Number(old.chanceEvents || 0) + 1,
-    }));
+    }), { force: true });
     const freshStats = await getCatStats(chatId, env);
     await sendText(
       chatId,
@@ -1939,21 +2641,21 @@ async function sendCatForUser(chatId, env) {
     );
     result = await sendRandomCat(chatId, env);
     await unlockAchievement(chatId, "legendary_cat", "این یکی معمولی نبود", env);
-  } else if (roll < 0.024) {
+  } else if (roll < 0.033) {
     await mutateCatStats(chatId, env, (old) => ({
       ...old,
       duckMistakes: Number(old.duckMistakes || 0) + 1,
       chanceEvents: Number(old.chanceEvents || 0) + 1,
-    }));
+    }), { force: true });
     await sendText(chatId, "گربه‌هامون حال نداشتن بیان. اردک  فرستادم برات.", env);
     result = await sendRandomDuck(chatId, env);
     await unlockAchievement(chatId, "duck_mistake", "عه وا ببخشید دستم خورد", env);
-  } else if (roll < 0.042) {
+  } else if (roll < 0.051) {
     await mutateCatStats(chatId, env, (old) => ({
       ...old,
       sulks: Number(old.sulks || 0) + 1,
       chanceEvents: Number(old.chanceEvents || 0) + 1,
-    }));
+    }), { force: true });
     await sendText(chatId, pickRandom([
       "گربه قهر کرده. امروز خودش نخواست بیاد.",
       "نه. خودش گفت نمیام.",
@@ -1961,12 +2663,12 @@ async function sendCatForUser(chatId, env) {
     ]), env);
     result = { ok: true, sulk: true };
     await unlockAchievement(chatId, "cat_sulk", "رد شدن توسط گربه", env);
-  } else if (roll < 0.067) {
+  } else if (roll < 0.076) {
     await mutateCatStats(chatId, env, (old) => ({
       ...old,
       extraCats: Number(old.extraCats || 0) + 1,
       chanceEvents: Number(old.chanceEvents || 0) + 1,
-    }));
+    }), { force: true });
     const first = await sendRandomCat(chatId, env);
     if (first?.ok) {
       await sleep(250);
@@ -2120,10 +2822,12 @@ async function sendRandomCat(chatId, env, extra = {}) {
 }
 
 async function sendDailyCats(env) {
-  const chatIds = await listChatIdsByPrefix(
-    env.BOT_KV,
-    DAILY_KEY_PREFIX
-  );
+  const [allDailyIds, disabledIds] = await Promise.all([
+    listChatIdsByPrefix(env.BOT_KV, DAILY_KEY_PREFIX),
+    listChatIdsByPrefix(env.BOT_KV, DISABLED_KEY_PREFIX),
+  ]);
+  const disabled = new Set(disabledIds);
+  const chatIds = allDailyIds.filter((id) => !disabled.has(id));
 
   const stats = {
     recipients: chatIds.length,
@@ -2234,6 +2938,75 @@ async function telegram(
       ok: false,
       description: String(error),
     };
+  }
+}
+
+function logDetailedError(label, error) {
+  console.error(label, {
+    name: error?.name || "Error",
+    message: error?.message || String(error || ""),
+    stack: error?.stack || "",
+    cause: error?.cause || null,
+  });
+}
+
+async function safeKvGet(namespace, key, fallback = null) {
+  if (!namespace?.get) {
+    console.error("KV get skipped: BOT_KV binding is missing", key);
+    return fallback;
+  }
+
+  try {
+    const value = await namespace.get(key);
+    return value === null ? fallback : value;
+  } catch (error) {
+    logDetailedError(`KV get ${key}`, error);
+    return fallback;
+  }
+}
+
+async function safeKvPut(namespace, key, value, options) {
+  if (!namespace?.put) {
+    console.error("KV put skipped: BOT_KV binding is missing", key);
+    return false;
+  }
+
+  try {
+    await namespace.put(key, value, options);
+    return true;
+  } catch (error) {
+    logDetailedError(`KV put ${key}`, error);
+    return false;
+  }
+}
+
+async function safeKvDelete(namespace, key) {
+  if (!namespace?.delete) {
+    console.error("KV delete skipped: BOT_KV binding is missing", key);
+    return false;
+  }
+
+  try {
+    await namespace.delete(key);
+    return true;
+  } catch (error) {
+    logDetailedError(`KV delete ${key}`, error);
+    return false;
+  }
+}
+
+function pruneMemoryMap(map) {
+  if (map.size <= MEMORY_MAP_LIMIT) {
+    return;
+  }
+
+  const removeCount = map.size - MEMORY_MAP_LIMIT;
+  let removed = 0;
+
+  for (const key of map.keys()) {
+    map.delete(key);
+    removed += 1;
+    if (removed >= removeCount) break;
   }
 }
 
