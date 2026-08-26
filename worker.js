@@ -1,10 +1,11 @@
 const CAT_TRIGGER = "پیش پیش";
 const CAT_BUTTON = "🐱 پیش پیش";
 const ANON_BUTTON = "🥷 پیام ناشناس";
-const MEW_STATS_BUTTON = "📊 آمار بی‌مصرف";
+const MEW_STATS_BUTTON = "📊 آمار حیاتی";
 const DAILY_ON_BUTTON = "🔔 فعال کردن میو روزانه";
 const DAILY_OFF_BUTTON = "🔕 قطع میو روزانه";
 const CANCEL_BUTTON = "❌ لغو";
+const MODAM_BUTTON = "its modam💫";
 
 const USER_KEY_PREFIX = "user:";
 const STARTER_KEY_PREFIX = "starter:";
@@ -16,11 +17,12 @@ const PARTIAL_PISH_KEY_PREFIX = "partial_pish:";
 const ACHIEVEMENT_KEY_PREFIX = "achievement:";
 const CRON_LAST_KEY = "cron:last";
 const BROADCAST_DRAFT_PREFIX = "broadcast:draft:";
+const BROADCAST_ARCHIVE_PREFIX = "broadcast:archive:";
 const ANON_SESSION_PREFIX = "anon_session:";
 const ANON_CLOSED_PREFIX = "anon_closed:";
 const ANON_WAIT_TTL = 15 * 60;
 const ANON_SESSION_TTL = 7 * 24 * 60 * 60;
-const BROADCAST_DRAFT_TTL = 10 * 60;
+const BROADCAST_DRAFT_TTL = 2 * 60 * 60;
 const REPLY_ROUTE_TTL = 30 * 24 * 60 * 60;
 
 const DISABLED_KEY_PREFIX = "disabled:";
@@ -33,23 +35,42 @@ const CAT_STATS_FLUSH_INTERVAL_MS = 15 * 60 * 1000;
 const MAX_AI_INPUT_CHARS = 1800;
 const MAX_AI_OUTPUT_TOKENS = 256;
 const MEMORY_MAP_LIMIT = 1200;
+const TWITTER_DOWNLOAD_COOLDOWN_MS = 15 * 1000;
+const MODAM_REPLAY_PAGE_SIZE = 12;
+const BROADCAST_FREE_CHUNK_SIZE = 18;
+const TELEGRAM_REMOTE_VIDEO_LIMIT = 20 * 1024 * 1024;
+const WORKER_MEMORY_LIMIT_BYTES = 128 * 1024 * 1024;
+const WORKER_FREE_CPU_LIMIT_MS = 10;
+const HEALTH_PROBE_TIMEOUT_MS = 3000;
+const HEALTH_CF_WINDOW_MINUTES = 15;
+const HEALTH_CF_FALLBACK_WINDOWS_MINUTES = [15, 60, 360, 1440];
+const HEALTH_CF_AGGREGATION_LAG_MINUTES = 3;
+const HEALTH_KV_COUNT_MAX_PAGES = 4;
+const APP_USER_AGENT = "gorbabat/2.3.0 (+https://github.com/modamires/gorbabat)";
 
 const catBurstMemory = new Map();
 const partialPishMemory = new Map();
 const catStatsMemory = new Map();
 const aiJobMemory = new Map();
+const downloadCooldownMemory = new Map();
 
-const WELCOME_TEXT = `باز تو پیدات شد؟؟! 😼
+const WELCOME_TEXT = `
 
+باز تو پیدات شد؟؟! 😼
 
-🐱 «پیش پیش» بگی، برات عکس گربه می‌فرستم.
-🎙️ توی ویس هم «پیش پیش» کنی می‌فهمم؛ صدا قشنگ! قناری نشی شکارت می‌کنم.
-💬 میتونی باهام حرف هم بزنی. پیام یا سوالتو بفرست، به زبون خودم جواب می‌دم؛.
-🥷 «پیام ناشناس» حرفت رو بی‌اسم می‌رسونه به امیرآقا.
-🔔 روزی دوبار میام پیشت، اگه دوست نداشتی گزینه میو روزانه رو غیر فعال کن.
+🐱 «پیش‌پیش» بگی، عکس گربه تحویلت می‌دم.
+🎙️ حتی اگه توی ویس «پیش‌پیش» کنی، می‌فهمم؛ صدا قشنگ!
+💬 حرف هم می‌زنم(به هوش مصنوعی وصلم. به اون بالامالا ها). پیام یا سؤالت رو بفرست، به زبون خودم جوابت رو می‌دم.
+📥 لینک پست توییتر/X بفرست؛ متن و مدیاشو برات می‌کشم بیرون. از بقیه جاها لینک نگیرم بهتره 😾
+🗞️ با گزینه «its modam» می‌تونی آرشیو پیام‌های مهم منو ببینی؛ یه جورایی چنل دیلی منه.
+🥷 «پیام ناشناس» حرفت رو بی‌اسم و رسم می‌رسونه به امیرآقا.
+🔔 روزی دو بار میام سراغت؛ اگه دوست نداشتی، «میو روزانه» رو غیرفعال کن.
 
-یه مشت راز و چیزای مهم رو زیر خاک قایم کردم. پیداشون کردی زیادی جوگیر نشو.
-بهترین ربات تلگرام.😼`;
+یه مشت راز و چیز مهم هم یه جایی زیر خاک قایم کردم، برای پیدا کردنشون از خود گربابات سوال بپرس، راهنماییت میکنه...
+پیداشون کردی، زیادی جوگیر نشو. 😼
+
+بهترین ربات تلگرام. 🐱
+`;
 
 
 const HELP_TEXT = `راهنما 😼
@@ -60,6 +81,8 @@ const HELP_TEXT = `راهنما 😼
 📊 /mewstats — آمار کاملاً حیاتی و بی‌مصرف
 🥷 پیام ناشناس — فرستادن پیام بی‌اسم برای مدیر
 💬 حرف معمولی — جواب میویی + دکمه «ترجمه به زبون آدمیزاد»
+📥 لینک پست X/Twitter — دانلود متن و مدیای عمومی توییت
+🗞 its modam — آرشیو Broadcastهای ربات
 🔔/🔕 میو روزانه — روشن/خاموش کردن ارسال خودکار
 ❌ لغو — لغو پیام ناشناس`;
 
@@ -105,10 +128,14 @@ const GORBABAT_SYSTEM_PROMPT = `تو «گوربابات» هستی؛ یک گرب
 - /mewstats آمار بی‌مصرف را نشان می‌دهد.
 - میو روزانه قابل روشن/خاموش کردن است.
 - «پیام ناشناس» پیام را بی‌اسم برای امیرآقا می‌فرستد و امکان ادامه گفتگو دارد.
+- فقط لینک مستقیم پست عمومی X/Twitter را برای دانلود قبول می‌کنی. لینک سایت‌های دیگر را قبول نمی‌کنی و کوتاه می‌گویی فقط لینک توییتر/X می‌گیری.
+- دکمه «its modam» آرشیو پیام‌های Broadcast شده از نسخه‌های جدید را نشان می‌دهد.
 - اتفاق‌های نادر شامل گربه لجندری، اردک اشتباهی، قهر گربه، گربه اضافه، اعتراض و سکوت گوربابات است.
 - «پیش» نصفه یک مسیر مخفی دارد.
-- چند Easter Egg متنی هم وجود دارد؛ مثل میو، صدا زدن خود گوربابات، کلمه سگ، پیشته، امیرآقا، pspsps، ماهی، جعبه، لیزر، کنسرو، دامپزشک، نه‌جان، «من گربه‌ام»، 404، نخ قرمز، کت‌نیپ و چند مورد دیگر.
-- اگر درباره قابلیت‌های مخفی پرسیدند، اول چند سرنخ بده و همه رازها را یک‌جا لو نده مگر کاربر صریحاً اصرار کند.
+- چند Easter Egg متنی هم وجود دارد؛ مثل میو، صدا زدن خود گوربابات، کلمه سگ، پیشته، امیرآقا، pspsps، ماهی، جعبه، لیزر، کنسرو، دامپزشک، نه‌جان، «من گربه‌ام»، 404، نخ قرمز، کت‌نیپ، موش، جاروبرقی، آب/حموم، بارون، گربه سیاه، سبیل، دم، مرغ، sudo/root، Ctrl+C، Alt+F4، ping و چند مورد دیگر.
+- اگر درباره قابلیت‌های مخفی پرسیدند، سرنخ‌های کاربردی‌تر و بیشتری بده: معمولاً ۲ تا ۴ سرنخ کوتاه در دسته‌هایی مثل غذاها، چیزهایی که گربه ازشان بدش می‌آید، وسایل گربه‌ای، کلمات فنی/اینترنتی و صدا زدن‌های عجیب.
+- سرنخ باید آن‌قدر مشخص باشد که کاربر واقعاً بتواند Easter Egg پیدا کند؛ فقط نگو «امتحان کن». چند نمونه نزدیک بده، ولی جواب دقیق همه رازها را یک‌جا لو نده.
+- اگر کاربر دنبال رازها گشت یا صریحاً گفت «بیشتر راهنمایی کن»، هر بار سرنخ‌های تازه‌تر و نزدیک‌تر بده. هربار راز های رندم رو راهنمایی کن نه فقط راز های اول لیست. اگر صریحاً اصرار کرد همه را بداند، می‌توانی تعداد بیشتری از کلیدواژه‌ها را لو بدهی.
 
 رفتار پاسخ‌گویی:
 - سؤال واقعی یا فنی: جواب درست را اولویت بده و فقط چاشنی شخصیت اضافه کن.
@@ -227,7 +254,7 @@ async function handleMessage(message, env) {
     return;
   }
 
-  if (isAdmin && command === "/health") {
+  if (isAdmin && (command === "/health" || command === "/helth")) {
     await handleHealth(chatId, env);
     return;
   }
@@ -259,7 +286,7 @@ async function handleMessage(message, env) {
 /stats — آمار کاربران و فعالیت
 /users — لیست کاربران، نام، @username و آخرین فعالیت
 /starters — استارت‌زن‌ها با نام و @username
-/health — سلامت KV، تلگرام، AI، گربه و Chance Event و Cron
+/health یا /helth — گزارش عددی سلامت، latency، cache/RAM، CPU و سرویس‌ها
 /broadcast متن — پیش‌نمایش و تأیید ارسال همگانی
 /broadcast active7 متن — فقط فعال‌های ۷ روز اخیر
 /broadcast daily متن — فقط کسانی که میو روزانه روشن دارند
@@ -276,7 +303,7 @@ async function handleMessage(message, env) {
     !isAdmin &&
     [
       "/broadcast", "/testdaily", "/cronstatus", "/adminhelp",
-      "/stats", "/users", "/starters", "/health", "/anonclose"
+      "/stats", "/users", "/starters", "/health", "/helth", "/anonclose"
     ].includes(command)
   ) {
     await sendText(chatId, "این دستور فقط برای مدیر رباته.", env);
@@ -405,6 +432,11 @@ async function handleMessage(message, env) {
     return;
   }
 
+  if (text === MODAM_BUTTON || text.toLowerCase() === "its modam") {
+    await sendBroadcastArchivePage(chatId, env, 0);
+    return;
+  }
+
   if (command === "/anon") {
     const anonymousText = text
       .replace(/^\/anon(?:@\w+)?\s*/i, "")
@@ -468,6 +500,26 @@ async function handleMessage(message, env) {
     return;
   }
 
+  const linkRequest = detectLinkRequest(text);
+  if (linkRequest) {
+    if (linkRequest.kind === "twitter") {
+      await handleTwitterDownload(message, linkRequest, env);
+    } else if (linkRequest.kind === "twitter_invalid") {
+      await sendText(
+        chatId,
+        "😾 لینک مستقیم خودِ پست توییتر/X رو بفرست، نه پروفایل و این چیزا.",
+        env
+      );
+    } else {
+      await sendText(
+        chatId,
+        "😾 من فقط لینک توییتر/X می‌گیرم. لینک بقیه جاها رو نریز جلوی پنجه‌م.",
+        env
+      );
+    }
+    return;
+  }
+
   if (await handleHiddenEasterEgg(chatId, text, env)) {
     return;
   }
@@ -492,7 +544,7 @@ function mainKeyboard(dailyEnabled) {
   return {
     keyboard: [
       [{ text: CAT_BUTTON }, { text: MEW_STATS_BUTTON }],
-      [{ text: ANON_BUTTON }],
+      [{ text: ANON_BUTTON }, { text: MODAM_BUTTON }],
       [{ text: dailyEnabled ? DAILY_OFF_BUTTON : DAILY_ON_BUTTON }],
     ],
     resize_keyboard: true,
@@ -984,6 +1036,9 @@ async function handleBroadcastCommand(message, env) {
     text: repliedMessage ? "" : parsed.content,
     fromChatId: repliedMessage ? adminChatId : "",
     messageId: repliedMessage?.message_id || null,
+    snapshot: repliedMessage
+      ? buildBroadcastSnapshot(repliedMessage, adminChatId)
+      : { kind: "text", text: parsed.content },
     createdAt: new Date().toISOString(),
   };
 
@@ -1023,6 +1078,13 @@ async function handleCallbackQuery(callback, env) {
     return;
   }
 
+  if (data.startsWith("modam:")) {
+    const offset = Math.max(0, Number(data.split(":")[1] || 0));
+    await answerCallback(callbackId, "چشم. بقیشم میارم…", env);
+    await sendBroadcastArchivePage(fromId, env, offset);
+    return;
+  }
+
   if (!data.startsWith("bc_")) {
     await answerCallback(callbackId, "این دکمه منقضی شده.", env);
     return;
@@ -1033,7 +1095,7 @@ async function handleCallbackQuery(callback, env) {
     return;
   }
 
-  const [action, draftId] = data.split(":");
+  const [action, draftId, offsetRaw] = data.split(":");
   const key = `${BROADCAST_DRAFT_PREFIX}${draftId}`;
   const raw = await env.BOT_KV.get(key);
   const draft = parseJsonValue(raw, null);
@@ -1044,22 +1106,643 @@ async function handleCallbackQuery(callback, env) {
   }
 
   if (action === "bc_no") {
-    await env.BOT_KV.delete(key);
+    await safeKvDelete(env.BOT_KV, key);
     await answerCallback(callbackId, "لغو شد.", env);
     await clearInlineKeyboard(callback.message, env);
     await sendText(adminId, "ارسال همگانی لغو شد.", env);
     return;
   }
 
-  if (action !== "bc_ok") {
-    await answerCallback(callbackId, "دستور نامعتبره.", env, true);
+  if (action === "bc_ok") {
+    await answerCallback(callbackId, "ارسال شروع شد…", env);
+    await clearInlineKeyboard(callback.message, env);
+
+    if (!draft.archived) {
+      await archiveBroadcast(draft, env);
+      draft.archived = true;
+      draft.progress = draft.progress || { sent: 0, failed: 0, removed: 0, nextOffset: 0 };
+      await safeKvPut(env.BOT_KV, key, JSON.stringify(draft), { expirationTtl: BROADCAST_DRAFT_TTL });
+    }
+
+    await executeBroadcastDraft(draft, adminId, env, 0, key);
     return;
   }
 
-  await env.BOT_KV.delete(key);
-  await answerCallback(callbackId, "ارسال شروع شد…", env);
-  await clearInlineKeyboard(callback.message, env);
-  await executeBroadcastDraft(draft, adminId, env);
+  if (action === "bc_more") {
+    const offset = Math.max(0, Number(offsetRaw || draft.progress?.nextOffset || 0));
+    await answerCallback(callbackId, "ادامه می‌دم…", env);
+    await clearInlineKeyboard(callback.message, env);
+    await executeBroadcastDraft(draft, adminId, env, offset, key);
+    return;
+  }
+
+  await answerCallback(callbackId, "دستور نامعتبره.", env, true);
+}
+
+
+function buildBroadcastSnapshot(message, fallbackChatId = "") {
+  if (!message) return null;
+
+  const caption = String(message.caption || "").slice(0, 1000);
+  const common = caption ? { caption } : {};
+
+  if (message.text) {
+    return { kind: "text", text: String(message.text).slice(0, 3800) };
+  }
+
+  if (Array.isArray(message.photo) && message.photo.length) {
+    const photo = message.photo[message.photo.length - 1];
+    return { kind: "photo", fileId: photo.file_id, ...common };
+  }
+
+  const mediaMap = [
+    ["video", "video"],
+    ["animation", "animation"],
+    ["audio", "audio"],
+    ["document", "document"],
+    ["voice", "voice"],
+    ["sticker", "sticker"],
+    ["video_note", "videoNote"],
+  ];
+
+  for (const [field, kind] of mediaMap) {
+    if (message[field]?.file_id) {
+      return { kind, fileId: message[field].file_id, ...common };
+    }
+  }
+
+  if (message.message_id && (message.chat?.id || fallbackChatId)) {
+    return {
+      kind: "copy",
+      fromChatId: String(message.chat?.id || fallbackChatId),
+      messageId: message.message_id,
+    };
+  }
+
+  return null;
+}
+
+async function archiveBroadcast(draft, env) {
+  if (!draft?.id || !env.BOT_KV) return false;
+
+  const createdAt = draft.createdAt || new Date().toISOString();
+  const timestamp = Number(Date.parse(createdAt)) || Date.now();
+  const key = `${BROADCAST_ARCHIVE_PREFIX}${String(timestamp).padStart(13, "0")}:${draft.id}`;
+  const archive = {
+    id: draft.id,
+    createdAt,
+    kind: draft.kind,
+    text: draft.text || "",
+    snapshot: draft.snapshot || null,
+    fromChatId: draft.fromChatId || "",
+    messageId: draft.messageId || null,
+  };
+
+  return safeKvPut(env.BOT_KV, key, JSON.stringify(archive));
+}
+
+async function listBroadcastArchiveKeys(env) {
+  if (!env.BOT_KV?.list) return [];
+
+  const keys = [];
+  let cursor;
+
+  do {
+    const options = { prefix: BROADCAST_ARCHIVE_PREFIX, limit: 1000 };
+    if (cursor) options.cursor = cursor;
+
+    const page = await env.BOT_KV.list(options);
+    keys.push(...page.keys.map((item) => item.name));
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+
+  return keys.sort().reverse();
+}
+
+async function sendBroadcastArchivePage(chatId, env, offset = 0) {
+  const keys = await listBroadcastArchiveKeys(env);
+
+  if (!keys.length) {
+    await sendText(chatId, "هنوز چیزی توی its modam نریختم. بعداً بیا فضولی کن 😼", env);
+    return;
+  }
+
+  const safeOffset = Math.max(0, Math.min(Number(offset || 0), keys.length));
+  const pageKeys = keys.slice(safeOffset, safeOffset + MODAM_REPLAY_PAGE_SIZE);
+  const records = await Promise.all(
+    pageKeys.map(async (key) => {
+      const raw = await safeKvGet(env.BOT_KV, key, null);
+      return parseJsonValue(raw, null);
+    })
+  );
+
+  for (const record of records.filter(Boolean)) {
+    await sendBroadcastArchiveItem(chatId, record, env);
+    await sleep(450);
+  }
+
+  const nextOffset = safeOffset + pageKeys.length;
+  if (nextOffset < keys.length) {
+    await sendText(
+      chatId,
+      `فعلاً ${pageKeys.length} تاشو ریختم جلوت. ${keys.length - nextOffset} تای قدیمی‌تر هم هست.`,
+      env,
+      {
+        reply_markup: {
+          inline_keyboard: [[
+            { text: "🗞 قدیمی‌ترها", callback_data: `modam:${nextOffset}` },
+          ]],
+        },
+      }
+    );
+  }
+}
+
+async function sendBroadcastArchiveItem(chatId, record, env) {
+  const snapshot = record.snapshot || (
+    record.kind === "text"
+      ? { kind: "text", text: record.text || "" }
+      : {
+          kind: "copy",
+          fromChatId: record.fromChatId,
+          messageId: record.messageId,
+        }
+  );
+
+  if (!snapshot) return false;
+
+  if (snapshot.kind === "text") {
+    return sendText(chatId, snapshot.text || "", env);
+  }
+
+  if (snapshot.kind === "copy") {
+    return telegram(env, "copyMessage", {
+      chat_id: chatId,
+      from_chat_id: snapshot.fromChatId,
+      message_id: snapshot.messageId,
+    });
+  }
+
+  const methodMap = {
+    photo: ["sendPhoto", "photo"],
+    video: ["sendVideo", "video"],
+    animation: ["sendAnimation", "animation"],
+    audio: ["sendAudio", "audio"],
+    document: ["sendDocument", "document"],
+    voice: ["sendVoice", "voice"],
+    sticker: ["sendSticker", "sticker"],
+    videoNote: ["sendVideoNote", "video_note"],
+  };
+
+  const mapped = methodMap[snapshot.kind];
+  if (!mapped || !snapshot.fileId) return false;
+
+  const [method, field] = mapped;
+  const payload = { chat_id: chatId, [field]: snapshot.fileId };
+  if (snapshot.caption && snapshot.kind !== "sticker" && snapshot.kind !== "videoNote") {
+    payload.caption = snapshot.caption;
+  }
+  if (snapshot.kind === "video") payload.supports_streaming = true;
+
+  return telegram(env, method, payload);
+}
+
+async function pinBroadcastMessage(chatId, messageId, env) {
+  try {
+    const result = await telegram(env, "pinChatMessage", {
+      chat_id: chatId,
+      message_id: messageId,
+      disable_notification: true,
+    });
+    return Boolean(result?.ok);
+  } catch (error) {
+    logDetailedError(`pin broadcast ${chatId}:${messageId}`, error);
+    return false;
+  }
+}
+
+function extractFirstHttpUrl(text = "") {
+  const match = String(text).match(/https?:\/\/[^\s<>"']+/i);
+  if (!match) return "";
+  return match[0].replace(/[\]\[(){}<>،؛,.!?؟]+$/g, "");
+}
+
+function detectLinkRequest(text = "") {
+  const raw = extractFirstHttpUrl(text);
+  if (!raw) return null;
+
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    return null;
+  }
+
+  const host = url.hostname.toLowerCase().replace(/^www\./, "");
+  const isTwitterHost =
+    host === "x.com" ||
+    host.endsWith(".x.com") ||
+    host === "twitter.com" ||
+    host.endsWith(".twitter.com");
+
+  if (!isTwitterHost) {
+    return {
+      kind: "unsupported",
+      url: raw,
+    };
+  }
+
+  const tweetId = (url.pathname || "").match(/\/status\/(\d{2,20})/i)?.[1] || "";
+
+  if (!tweetId) {
+    return {
+      kind: "twitter_invalid",
+      url: raw,
+    };
+  }
+
+  return {
+    kind: "twitter",
+    platform: "twitter",
+    url: raw,
+    tweetId,
+  };
+}
+
+async function handleTwitterDownload(message, request, env) {
+  const chatId = String(message.chat.id);
+  const now = Date.now();
+  const cooldownUntil = Number(downloadCooldownMemory.get(chatId) || 0);
+
+  if (cooldownUntil > now) {
+    await sendText(chatId, "😾 یکی‌یکی لینک بده آدمیزاد. هنوز قبلیه از گلوم پایین نرفته.", env);
+    return;
+  }
+
+  downloadCooldownMemory.set(chatId, now + TWITTER_DOWNLOAD_COOLDOWN_MS);
+  pruneMemoryMap(downloadCooldownMemory);
+
+  // ChatAction پیام محسوب نمی‌شود؛ بنابراین کاربر در نهایت فقط یک پیام می‌گیرد.
+  await telegram(env, "sendChatAction", {
+    chat_id: chatId,
+    action: "upload_video",
+  });
+
+  try {
+    const post = await fetchTwitterPost(request.tweetId);
+
+    if (!post) {
+      await sendText(
+        chatId,
+        "😾 این توییت رو نتونستم از زیر پنجه‌های X بکشم بیرون. لینک مستقیم یه پست عمومی رو بفرست.",
+        env
+      );
+      return;
+    }
+
+    const media = extractTwitterMedia(post);
+    const primaryMedia = media[0] || null;
+    const footer = await buildTwitterFooterHtml(post, request, env);
+    const replyParameters = {
+      message_id: message.message_id,
+      allow_sending_without_reply: true,
+    };
+
+    if (primaryMedia) {
+      const caption = buildTwitterMessageHtml(post?.text || "", footer, 900);
+      const sent = await sendSingleTwitterMedia(
+        chatId,
+        primaryMedia,
+        caption,
+        replyParameters,
+        env
+      );
+
+      if (sent?.ok) {
+        return;
+      }
+
+      // اگر Telegram نتوانست URL مدیا را مستقیم بگیرد، باز هم فقط یک پیام قابل‌مشاهده
+      // می‌فرستیم: متن پست + attribution + دکمه دانلود مستقیم.
+      const fallbackBody = buildTwitterMessageHtml(
+        `${String(post?.text || "").trim()}${post?.text ? "\n\n" : ""}مدیا پیدا شد، ولی تلگرام مستقیم نگرفتش.`,
+        footer,
+        3300
+      );
+
+      const fallback = await sendText(chatId, fallbackBody, env, {
+        parse_mode: "HTML",
+        link_preview_options: { is_disabled: true },
+        reply_parameters: replyParameters,
+        reply_markup: {
+          inline_keyboard: [[
+            { text: "⬇️ دانلود مدیا", url: primaryMedia.url },
+          ]],
+        },
+      });
+
+      if (!fallback?.ok) {
+        // اگر URL دکمه از طرف Telegram رد شد، یک پیام ساده بدون دکمه می‌فرستیم.
+        await sendText(
+          chatId,
+          buildTwitterMessageHtml(post?.text || "", footer, 3300),
+          env,
+          {
+            parse_mode: "HTML",
+            link_preview_options: { is_disabled: true },
+            reply_parameters: replyParameters,
+          }
+        );
+      }
+
+      return;
+    }
+
+    // پست بدون مدیا: همان یک پیام متنی با footer لینک‌دار.
+    await sendText(
+      chatId,
+      buildTwitterMessageHtml(post?.text || "", footer, 3600),
+      env,
+      {
+        parse_mode: "HTML",
+        link_preview_options: { is_disabled: true },
+        reply_parameters: replyParameters,
+      }
+    );
+  } catch (error) {
+    logDetailedError("twitter download", error);
+    await sendText(
+      chatId,
+      "😾 دانلودر توییتر یه لگد خورد. چند لحظه دیگه دوباره همون لینک رو بفرست.",
+      env
+    );
+  }
+}
+
+async function fetchTwitterPost(tweetId) {
+  if (!tweetId) return null;
+
+  const headers = {
+    Accept: "application/json",
+    "User-Agent": APP_USER_AGENT,
+  };
+
+  try {
+    const v2 = await fetchJsonWithTimeout(
+      `https://api.fxtwitter.com/2/status/${tweetId}`,
+      { headers },
+      3500
+    );
+    const status = v2?.status || null;
+    if (status) return status;
+  } catch (error) {
+    logDetailedError("FxTwitter v2", error);
+  }
+
+  try {
+    const v1 = await fetchJsonWithTimeout(
+      `https://api.fxtwitter.com/i/status/${tweetId}`,
+      { headers },
+      2500
+    );
+    return v1?.tweet || null;
+  } catch (error) {
+    logDetailedError("FxTwitter fallback", error);
+    return null;
+  }
+}
+
+function extractTwitterMedia(post) {
+  if (!post?.media) return [];
+
+  const media = post.media;
+  const rawItems = Array.isArray(media.all) && media.all.length
+    ? media.all
+    : [
+        ...(Array.isArray(media.photos) ? media.photos : []),
+        ...(Array.isArray(media.videos) ? media.videos : []),
+      ];
+
+  const seen = new Set();
+  const output = [];
+
+  for (const item of rawItems) {
+    if (!item) continue;
+
+    const type = item.type === "photo"
+      ? "photo"
+      : item.type === "gif"
+        ? "animation"
+        : "video";
+
+    let url = "";
+
+    if (type === "photo") {
+      url = item.url || item.original_url || "";
+    } else {
+      const formats = Array.isArray(item.formats)
+        ? item.formats.filter((format) => format?.url)
+        : [];
+
+      const preferred = formats
+        .filter((format) => !format.container || format.container === "mp4")
+        .filter((format) => !format.codec || format.codec === "h264")
+        .sort((a, b) => {
+          const aFits =
+            Number(a.size || 0) > 0 &&
+            Number(a.size) <= TELEGRAM_REMOTE_VIDEO_LIMIT;
+          const bFits =
+            Number(b.size || 0) > 0 &&
+            Number(b.size) <= TELEGRAM_REMOTE_VIDEO_LIMIT;
+
+          if (aFits !== bFits) return aFits ? -1 : 1;
+
+          return (
+            Number(b.height || b.bitrate || 0) -
+            Number(a.height || a.bitrate || 0)
+          );
+        })[0];
+
+      url = preferred?.url || item.url || item.transcode_url || "";
+    }
+
+    if (!isSafeHttpUrl(url) || seen.has(url)) continue;
+    seen.add(url);
+
+    output.push({ type, url });
+  }
+
+  return output.slice(0, 20);
+}
+
+async function sendSingleTwitterMedia(
+  chatId,
+  item,
+  caption,
+  replyParameters,
+  env
+) {
+  if (!item?.url) return { ok: false, description: "missing media url" };
+
+  let method = "sendVideo";
+  let field = "video";
+  const payload = {
+    chat_id: chatId,
+    caption,
+    parse_mode: "HTML",
+    reply_parameters: replyParameters,
+  };
+
+  if (item.type === "photo") {
+    method = "sendPhoto";
+    field = "photo";
+  } else if (item.type === "animation") {
+    method = "sendAnimation";
+    field = "animation";
+  } else {
+    payload.supports_streaming = true;
+  }
+
+  payload[field] = item.url;
+  return telegram(env, method, payload);
+}
+
+function buildTwitterMessageHtml(postText, footerHtml, maxVisibleChars = 900) {
+  const raw = String(postText || "").trim();
+  const maxText = Math.max(0, Number(maxVisibleChars || 0));
+  const clipped = raw.length > maxText
+    ? `${raw.slice(0, Math.max(0, maxText - 1)).trimEnd()}…`
+    : raw;
+
+  const body = clipped ? `${escapeHtml(clipped)}\n\n\n` : "";
+  return `${body}${footerHtml}`;
+}
+
+async function buildTwitterFooterHtml(post, request, env) {
+  const author = post?.author || {};
+  const rawHandle = String(
+    author.screen_name ||
+    author.username ||
+    ""
+  ).replace(/^@/, "").trim();
+
+  const safeHandle = /^[A-Za-z0-9_]{1,30}$/.test(rawHandle)
+    ? rawHandle
+    : "";
+
+  const name = String(
+    author.name ||
+    author.display_name ||
+    ""
+  ).trim();
+
+  const publisherLabel = name && safeHandle
+    ? `${name} (@${safeHandle})`
+    : name || (safeHandle ? `@${safeHandle}` : "منتشرکننده توییت");
+
+  const publisherUrl = safeHandle
+    ? `https://x.com/${encodeURIComponent(safeHandle)}`
+    : request.url;
+
+  const botUrl = await getBotPublicUrl(env);
+
+  return [
+    "────────────",
+    `👤 <a href="${escapeHtmlAttribute(publisherUrl)}">${escapeHtml(publisherLabel)}</a>`,
+    `😼 <a href="${escapeHtmlAttribute(botUrl)}">گوربابات؛ فوروارد شده از توئیتر</a>`,
+  ].join("\n");
+}
+
+let telegramBotUsernameCache = "";
+
+async function getBotPublicUrl(env) {
+  const configured = String(env?.BOT_USERNAME || "")
+    .replace(/^@/, "")
+    .trim();
+
+  if (/^[A-Za-z0-9_]{5,32}$/.test(configured)) {
+    telegramBotUsernameCache = configured;
+    return `https://t.me/${configured}`;
+  }
+
+  if (/^[A-Za-z0-9_]{5,32}$/.test(telegramBotUsernameCache)) {
+    return `https://t.me/${telegramBotUsernameCache}`;
+  }
+
+  try {
+    const me = await telegram(env, "getMe", {});
+    const username = String(me?.result?.username || "").trim();
+
+    if (/^[A-Za-z0-9_]{5,32}$/.test(username)) {
+      telegramBotUsernameCache = username;
+      return `https://t.me/${username}`;
+    }
+  } catch (error) {
+    logDetailedError("get bot public url", error);
+  }
+
+  // فقط fallback؛ معمولاً getMe نام کاربری بات را برمی‌گرداند.
+  return "https://github.com/modamires/gorbabat";
+}
+
+function escapeHtml(value = "") {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function escapeHtmlAttribute(value = "") {
+  return escapeHtml(value).replace(/"/g, "&quot;");
+}
+
+function isSafeHttpUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 6000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchJsonWithTimeout(url, options = {}, timeoutMs = 6000) {
+  const response = await fetchWithTimeout(url, options, timeoutMs);
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} for ${url}`);
+  }
+  return response.json();
+}
+
+async function editBotText(chatId, messageId, text, env, replyMarkup = undefined) {
+  if (!messageId) {
+    return sendText(chatId, text, env, replyMarkup ? { reply_markup: replyMarkup } : {});
+  }
+
+  return telegram(env, "editMessageText", {
+    chat_id: chatId,
+    message_id: messageId,
+    text: String(text).slice(0, 3900),
+    ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+  });
+}
+
+async function deleteBotMessage(chatId, messageId, env) {
+  if (!messageId) return false;
+  const result = await telegram(env, "deleteMessage", {
+    chat_id: chatId,
+    message_id: messageId,
+  });
+  return Boolean(result?.ok);
 }
 
 function randomMewSentence() {
@@ -1350,64 +2033,107 @@ async function clearInlineKeyboard(message, env) {
   });
 }
 
-async function executeBroadcastDraft(draft, adminChatId, env) {
+async function executeBroadcastDraft(
+  draft,
+  adminChatId,
+  env,
+  startOffset = 0,
+  draftKey = ""
+) {
   const recipients = await getBroadcastRecipients(env, draft.target || "all");
+  const offset = Math.max(0, Math.min(Number(startOffset || 0), recipients.length));
+  const group = recipients.slice(offset, offset + BROADCAST_FREE_CHUNK_SIZE);
 
-  await sendText(
-    adminChatId,
-    `ارسال همگانی برای ${recipients.length} مخاطب شروع شد…`,
-    env
-  );
-
-  let sent = 0;
-  let failed = 0;
-  let removed = 0;
-
-  for (let index = 0; index < recipients.length; index += 20) {
-    const group = recipients.slice(index, index + 20);
-
-    const results = await Promise.all(
-      group.map(async (targetChatId) => {
-        let result;
-
-        if (draft.kind === "copy") {
-          result = await telegram(env, "copyMessage", {
-            chat_id: targetChatId,
-            from_chat_id: draft.fromChatId,
-            message_id: draft.messageId,
-          });
-        } else {
-          result = await sendText(targetChatId, draft.text, env);
-        }
-
-        if (result?.ok) return "sent";
-
-        if (isTelegramGone(result)) {
-          await forgetUser(targetChatId, env);
-          return "removed";
-        }
-
-        return "failed";
-      })
-    );
-
-    for (const status of results) {
-      if (status === "sent") sent += 1;
-      else if (status === "removed") removed += 1;
-      else failed += 1;
-    }
-
-    if (index + 20 < recipients.length) {
-      await sleep(1100);
-    }
+  if (!group.length) {
+    if (draftKey) await safeKvDelete(env.BOT_KV, draftKey);
+    await sendText(adminChatId, "ارسال همگانی چیزی برای ادامه نداشت.", env);
+    return;
   }
 
+  if (offset === 0) {
+    await sendText(
+      adminChatId,
+      `ارسال همگانی برای ${recipients.length} مخاطب شروع شد…\nبرای اینکه روی پلن رایگان Worker از سقف subrequest رد نشیم، ارسال پین‌شده مرحله‌ای انجام می‌شه.`,
+      env
+    );
+  }
+
+  const results = await Promise.all(
+    group.map(async (targetChatId) => {
+      let result;
+
+      if (draft.kind === "copy") {
+        result = await telegram(env, "copyMessage", {
+          chat_id: targetChatId,
+          from_chat_id: draft.fromChatId,
+          message_id: draft.messageId,
+        });
+      } else {
+        result = await sendText(targetChatId, draft.text, env);
+      }
+
+      if (result?.ok) {
+        const sentMessageId = getTelegramMessageId(result);
+        if (sentMessageId) {
+          await pinBroadcastMessage(targetChatId, sentMessageId, env);
+        }
+        return "sent";
+      }
+
+      if (isTelegramGone(result)) {
+        await forgetUser(targetChatId, env);
+        return "removed";
+      }
+
+      return "failed";
+    })
+  );
+
+  const progress = {
+    sent: Number(draft.progress?.sent || 0),
+    failed: Number(draft.progress?.failed || 0),
+    removed: Number(draft.progress?.removed || 0),
+    nextOffset: offset,
+  };
+
+  for (const status of results) {
+    if (status === "sent") progress.sent += 1;
+    else if (status === "removed") progress.removed += 1;
+    else progress.failed += 1;
+  }
+
+  const nextOffset = offset + group.length;
+  progress.nextOffset = nextOffset;
+  draft.progress = progress;
+
+  if (nextOffset < recipients.length) {
+    if (draftKey) {
+      await safeKvPut(env.BOT_KV, draftKey, JSON.stringify(draft), { expirationTtl: BROADCAST_DRAFT_TTL });
+    }
+
+    await sendText(
+      adminChatId,
+      `این مرحله تموم شد.\n✅ موفق تا اینجا: ${progress.sent}\n❌ ناموفق: ${progress.failed}\n🧹 غیرفعال: ${progress.removed}\n⏳ باقی‌مانده: ${recipients.length - nextOffset}`,
+      env,
+      {
+        reply_markup: {
+          inline_keyboard: [[
+            {
+              text: `▶️ ادامه ارسال (${recipients.length - nextOffset})`,
+              callback_data: `bc_more:${draft.id}:${nextOffset}`,
+            },
+          ]],
+        },
+      }
+    );
+    return;
+  }
+
+  if (draftKey) await safeKvDelete(env.BOT_KV, draftKey);
+
   await sendText(
     adminChatId,
-    `ارسال همگانی تمام شد.
-✅ موفق: ${sent}
-❌ ناموفق: ${failed}
-🧹 حذف مخاطب غیرفعال: ${removed}`,
+    `ارسال همگانی تمام شد.\n✅ موفق: ${progress.sent}\n❌ ناموفق: ${progress.failed}\n🧹 حذف مخاطب غیرفعال: ${progress.removed}`,
     env
   );
 }
@@ -1469,64 +2195,450 @@ async function handleCronStatus(adminChatId, env) {
 }
 
 async function handleHealth(adminChatId, env) {
-  const checks = [];
+  const healthStartedAt = Date.now();
 
-  // KV را فقط با read چک می‌کنیم تا خود /health سهمیه write نسوزاند.
-  try {
-    if (!env.BOT_KV) {
-      checks.push("KV: ❌ Binding BOT_KV پیدا نشد");
-    } else {
-      await env.BOT_KV.get(CRON_LAST_KEY);
-      checks.push("KV: ✅");
-    }
-  } catch (error) {
-    checks.push("KV: ❌");
-  }
+  await sendText(adminChatId, "🩺 دارم رباتو می‌برم زیر دستگاه... یه لحظه 😾", env);
 
-  const me = await telegram(env, "getMe", {});
-  checks.push(`Telegram: ${me?.ok ? "✅" : "❌"}`);
-  checks.push(`Workers AI: ${env.AI ? "✅" : "❌ Binding AI پیدا نشد"}`);
+  const kvProbePromise = timedHealthProbe("KV", async () => {
+    if (!env.BOT_KV) throw new Error("BOT_KV binding missing");
+    await env.BOT_KV.get(CRON_LAST_KEY);
+    return true;
+  });
 
-  try {
-    const response = await fetch("https://ducks.now/api/v0/random/");
-    checks.push(`Chance Event API: ${response.ok ? "✅" : `❌ ${response.status}`}`);
-  } catch {
-    checks.push("Chance Event API: ❌");
-  }
+  const telegramProbePromise = timedHealthProbe("Telegram", async () => {
+    const result = await telegram(env, "getMe", {});
+    if (!result?.ok) throw new Error(result?.description || "Telegram getMe failed");
+    return result;
+  });
 
-  try {
-    const response = await fetch(
-      `https://cataas.com/cat?random=health-${crypto.randomUUID()}`
+  const catProbePromise = timedHealthProbe("Cat API", async () => {
+    const response = await fetchWithTimeout(
+      `https://cataas.com/cat?random=health-${crypto.randomUUID()}`,
+      { method: "GET" },
+      HEALTH_PROBE_TIMEOUT_MS
     );
-    checks.push(`Cat API: ${response.ok ? "✅" : `❌ ${response.status}`}`);
-  } catch {
-    checks.push("Cat API: ❌");
-  }
+    try { await response.body?.cancel(); } catch {}
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.status;
+  });
 
-  let users = [];
-  try {
-    users = await getAllUserRecords(env);
-  } catch (error) {
-    logDetailedError("health users", error);
-  }
+  const chanceProbePromise = timedHealthProbe("Chance API", async () => {
+    const response = await fetchWithTimeout(
+      "https://ducks.now/api/v0/random/",
+      { method: "GET" },
+      HEALTH_PROBE_TIMEOUT_MS
+    );
+    try { await response.body?.cancel(); } catch {}
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.status;
+  });
 
-  const daily = users.filter((u) => u.dailyEnabled).length;
+
+  const countsPromise = getHealthStorageCounts(env);
+  const cloudMetricsPromise = fetchCloudflareWorkerHealthMetrics(env);
+
+  const [kvProbe, telegramProbe, catProbe, chanceProbe, counts, cloudMetrics] =
+    await Promise.all([
+      kvProbePromise,
+      telegramProbePromise,
+      catProbePromise,
+      chanceProbePromise,
+      countsPromise,
+      cloudMetricsPromise,
+    ]);
+
   const cronRaw = await safeKvGet(env.BOT_KV, CRON_LAST_KEY, null);
   const cron = parseJsonValue(cronRaw, null);
   const cronText = cron
     ? `${cron.status || "unknown"} • ${formatRelativeTime(cron.finishedAt || cron.startedAt)}`
     : "هنوز ثبت نشده";
 
-  await sendText(
-    adminChatId,
-    `🩺 Health
-${checks.join("\n")}
+  const cache = getVisibleCacheHealth();
+  const aiOk = Boolean(env.AI);
+  const localScore = calculateHealthScore({
+    kvProbe,
+    telegramProbe,
+    catProbe,
+    chanceProbe,
+    aiOk,
+    cron,
+    cloudMetrics,
+  });
 
-👥 کاربران: ${users.length}
-🔔 میو روشن: ${daily}
-⏱ آخرین Cron: ${cronText}`,
-    env
+  const totalProbeMs = Math.max(0, Date.now() - healthStartedAt);
+  const scoreEmoji = localScore >= 90 ? "🟢" : localScore >= 70 ? "🟡" : localScore >= 50 ? "🟠" : "🔴";
+  const statusWord = localScore >= 90 ? "سالم" : localScore >= 70 ? "قابل قبول" : localScore >= 50 ? "مشکوک" : "خراب‌کاری در جریانه";
+
+  const lines = [
+    `🩺 Health Report — v2.3.0`,
+    ``,
+    `${scoreEmoji} سلامت کلی: ${localScore}/100 — ${statusWord}`,
+    healthBar(localScore),
+    ``,
+    `⚡ Latency واقعی همین تست`,
+    healthProbeLine("KV", kvProbe, 250),
+    healthProbeLine("Telegram", telegramProbe, 1200),
+    healthProbeLine("Cat API", catProbe, 1800),
+    healthProbeLine("Chance API", chanceProbe, 1800),
+    `⏱ کل تست: ${totalProbeMs} ms`,
+    ``,
+    `🧠 حافظه داخل isolate`,
+    `Cache قابل مشاهده: ${formatBytes(cache.totalBytes)} / 128 MB`,
+    healthBar((cache.totalBytes / WORKER_MEMORY_LIMIT_BYTES) * 100),
+    `Map entries: ${cache.totalEntries}/${MEMORY_MAP_LIMIT * cache.mapCount}`,
+    `cat:${catStatsMemory.size} • burst:${catBurstMemory.size} • pish:${partialPishMemory.size} • AI:${aiJobMemory.size} • DL:${downloadCooldownMemory.size}`,
+    ``,
+    `💾 KV / کاربران`,
+    `👥 users: ${counts.users} • starters: ${counts.starters}`,
+    `🔔 daily: ${counts.daily} • disabled: ${counts.disabled}`,
+    `🗞 broadcast archive: ${counts.broadcasts}`,
+    ``,
+    `🤖 AI Binding: ${aiOk ? "✅ وصل" : "❌ پیدا نشد"}`,
+    `⏱ Cron: ${cronText}`,
+  ];
+
+  if (cloudMetrics?.ok) {
+    const m = cloudMetrics.metrics;
+    const memP50 = Number(m.memoryP50 || 0);
+    const memP90 = Number(m.memoryP90 || 0);
+    const memP99 = Number(m.memoryP99 || 0);
+    const cpuP50Ms = Number(m.cpuP50Us || 0) / 1000;
+    const cpuP99Ms = Number(m.cpuP99Us || 0) / 1000;
+    const errorRate = m.requests > 0 ? (m.errors / m.requests) * 100 : 0;
+
+    lines.push(
+      ``,
+      `☁️ Cloudflare Metrics — ${Number(cloudMetrics.windowMinutes || HEALTH_CF_WINDOW_MINUTES)} دقیقه اخیر`,
+      `RAM P50: ${formatBytes(memP50)} • P90: ${formatBytes(memP90)} • P99: ${formatBytes(memP99)}`,
+      `RAM P90 ${healthBar((memP90 / WORKER_MEMORY_LIMIT_BYTES) * 100)}`,
+      `CPU P50: ${formatMs(cpuP50Ms)} • P99: ${formatMs(cpuP99Ms)} / 10 ms Free`,
+      `CPU P99 ${healthBar((cpuP99Ms / WORKER_FREE_CPU_LIMIT_MS) * 100)}`,
+      `Requests: ${m.requests} • Errors: ${m.errors} (${errorRate.toFixed(2)}%) • Subreq: ${m.subrequests}`
+    );
+  } else {
+    lines.push(
+      ``,
+      `☁️ RAM/CPU واقعی Cloudflare: ${cloudMetrics?.configured ? "⚠️ خطا در Metrics API" : "خاموش"}`,
+      cloudMetrics?.configured
+        ? `دلیل: ${String(cloudMetrics.error || "unknown").slice(0, 180)}`
+        : `تنظیمات Metrics ناقصه. پیدا نشد: ${(cloudMetrics?.missing || []).join("، ") || "نامشخص"}`,
+      `Config: Account ID ${env.CF_ACCOUNT_ID ? "✅" : "❌"} • Worker Name ${env.CF_WORKER_NAME ? "✅" : "❌"} • API Token ${env.CF_API_TOKEN ? "✅" : "❌"}`
+    );
+  }
+
+  lines.push(
+    ``,
+    `ℹ️ عدد Cache بالا تخمین آبجکت‌های خود کد است، نه کل RAM V8. RAM کل isolate فقط از Cloudflare Metrics قابل خواندن است.`
   );
+
+  await sendLongText(adminChatId, lines.join("\n"), env);
+}
+
+async function timedHealthProbe(label, fn) {
+  const startedAt = Date.now();
+  try {
+    const value = await fn();
+    return {
+      label,
+      ok: true,
+      ms: Math.max(0, Date.now() - startedAt),
+      value,
+      error: "",
+    };
+  } catch (error) {
+    return {
+      label,
+      ok: false,
+      ms: Math.max(0, Date.now() - startedAt),
+      value: null,
+      error: String(error?.message || error || "unknown"),
+    };
+  }
+}
+
+function healthProbeLine(name, probe, warnMs, suffix = "") {
+  const icon = !probe?.ok ? "❌" : Number(probe.ms || 0) > warnMs ? "🟡" : "✅";
+  const extra = suffix ? ` • ${suffix}` : "";
+  if (!probe?.ok) {
+    return `${icon} ${name}: ${probe?.ms ?? "-"} ms • ${String(probe?.error || "error").slice(0, 90)}`;
+  }
+  return `${icon} ${name}: ${probe.ms} ms${extra}`;
+}
+
+function healthBar(percent, width = 14) {
+  const safe = Math.max(0, Math.min(100, Number(percent) || 0));
+  const filled = Math.round((safe / 100) * width);
+  return `[${"█".repeat(filled)}${"░".repeat(width - filled)}] ${safe < 0.1 && safe > 0 ? "<0.1" : safe.toFixed(safe < 10 ? 1 : 0)}%`;
+}
+
+function formatBytes(value) {
+  const bytes = Math.max(0, Number(value) || 0);
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function formatMs(value) {
+  const ms = Math.max(0, Number(value) || 0);
+  if (ms < 1) return `${Math.round(ms * 1000)} µs`;
+  return `${ms.toFixed(ms < 10 ? 2 : 1)} ms`;
+}
+
+function estimateValueBytes(value) {
+  try {
+    return new TextEncoder().encode(typeof value === "string" ? value : JSON.stringify(value)).byteLength;
+  } catch {
+    return 0;
+  }
+}
+
+function estimateMapBytes(map) {
+  let total = 0;
+  for (const [key, value] of map.entries()) {
+    total += estimateValueBytes(key) + estimateValueBytes(value) + 32;
+  }
+  return total;
+}
+
+function getVisibleCacheHealth() {
+  const maps = [catBurstMemory, partialPishMemory, catStatsMemory, aiJobMemory, downloadCooldownMemory];
+  const mapBytes = maps.reduce((sum, map) => sum + estimateMapBytes(map), 0);
+  return {
+    totalBytes: mapBytes,
+    totalEntries: maps.reduce((sum, map) => sum + map.size, 0),
+    mapCount: maps.length,
+  };
+}
+
+async function countKeysByPrefix(namespace, prefix) {
+  if (!namespace?.list) return 0;
+  let count = 0;
+  let cursor;
+  let pages = 0;
+  do {
+    const options = { prefix, limit: 1000 };
+    if (cursor) options.cursor = cursor;
+    const page = await namespace.list(options);
+    count += page.keys?.length || 0;
+    pages += 1;
+    if (page.list_complete) return count;
+    cursor = page.cursor;
+  } while (cursor && pages < HEALTH_KV_COUNT_MAX_PAGES);
+
+  // /health نباید روی Free Plan خودش با listهای خیلی بزرگ سقف subrequest را پر کند.
+  return cursor ? `${count}+` : count;
+}
+
+async function getHealthStorageCounts(env) {
+  if (!env.BOT_KV) {
+    return { users: 0, starters: 0, daily: 0, disabled: 0, broadcasts: 0 };
+  }
+  try {
+    const [users, starters, daily, disabled, broadcasts] = await Promise.all([
+      countKeysByPrefix(env.BOT_KV, USER_KEY_PREFIX),
+      countKeysByPrefix(env.BOT_KV, STARTER_KEY_PREFIX),
+      countKeysByPrefix(env.BOT_KV, DAILY_KEY_PREFIX),
+      countKeysByPrefix(env.BOT_KV, DISABLED_KEY_PREFIX),
+      countKeysByPrefix(env.BOT_KV, BROADCAST_ARCHIVE_PREFIX),
+    ]);
+    return { users, starters, daily, disabled, broadcasts };
+  } catch (error) {
+    logDetailedError("health storage counts", error);
+    return { users: 0, starters: 0, daily: 0, disabled: 0, broadcasts: 0 };
+  }
+}
+
+function percentileMedian(values) {
+  const sorted = values.map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+  if (!sorted.length) return 0;
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function percentileMax(values) {
+  const nums = values.map(Number).filter(Number.isFinite);
+  return nums.length ? Math.max(...nums) : 0;
+}
+
+function getCloudflareMetricsConfigStatus(env) {
+  const accountTag = String(env?.CF_ACCOUNT_ID || "").trim();
+  const apiToken = String(env?.CF_API_TOKEN || "").trim();
+  const scriptName = String(env?.CF_WORKER_NAME || "").trim();
+  const missing = [];
+
+  if (!accountTag) missing.push("CF_ACCOUNT_ID");
+  if (!scriptName) missing.push("CF_WORKER_NAME");
+  if (!apiToken) missing.push("CF_API_TOKEN");
+
+  return {
+    accountTag,
+    apiToken,
+    scriptName,
+    configured: missing.length === 0,
+    missing,
+  };
+}
+
+async function fetchCloudflareWorkerHealthMetrics(env) {
+  const config = getCloudflareMetricsConfigStatus(env);
+  const { accountTag, apiToken, scriptName, configured, missing } = config;
+
+  if (!configured) {
+    return {
+      ok: false,
+      configured: false,
+      missing,
+      error: `Missing: ${missing.join(", ")}`,
+    };
+  }
+
+  // Cloudflare Analytics real-time نیست و چند دقیقه آخر ممکن است هنوز aggregate نشده باشد.
+  // از کوتاه‌ترین بازه شروع می‌کنیم و فقط اگر خالی بود تا 24 ساعت عقب می‌رویم.
+  let lastError = "";
+  for (const windowMinutes of HEALTH_CF_FALLBACK_WINDOWS_MINUTES) {
+    try {
+      const result = await queryCloudflareWorkerHealthMetricsWindow(
+        accountTag,
+        apiToken,
+        scriptName,
+        windowMinutes
+      );
+
+      if (result?.metrics && Number(result.metrics.requests || 0) > 0) {
+        return {
+          ok: true,
+          configured: true,
+          metrics: result.metrics,
+          windowMinutes,
+        };
+      }
+
+      lastError = `No metrics for script ${scriptName} in the last ${windowMinutes} minutes`;
+    } catch (error) {
+      lastError = String(error?.message || error || "unknown");
+      // خطای واقعی auth/schema را با چهار query پشت‌سرهم تکرار نمی‌کنیم.
+      if (!/No metrics/i.test(lastError)) break;
+    }
+  }
+
+  return {
+    ok: false,
+    configured: true,
+    error: lastError || `No metrics for script ${scriptName}`,
+  };
+}
+
+async function queryCloudflareWorkerHealthMetricsWindow(
+  accountTag,
+  apiToken,
+  scriptName,
+  windowMinutes
+) {
+  const now = new Date();
+  // چند دقیقه آخر را کنار می‌گذاریم چون Cloudflare خودش اعلام کرده aggregation کمی lag دارد.
+  const end = new Date(now.getTime() - HEALTH_CF_AGGREGATION_LAG_MINUTES * 60 * 1000);
+  const start = new Date(end.getTime() - Number(windowMinutes || HEALTH_CF_WINDOW_MINUTES) * 60 * 1000);
+
+  const query = `query GetWorkersHealth($accountTag: string, $datetimeStart: string, $datetimeEnd: string, $scriptName: string) {
+    viewer {
+      accounts(filter: {accountTag: $accountTag}) {
+        workersInvocationsAdaptive(limit: 1000, filter: {
+          scriptName: $scriptName,
+          datetime_geq: $datetimeStart,
+          datetime_leq: $datetimeEnd
+        }) {
+          sum { requests errors subrequests }
+          quantiles {
+            cpuTimeP50
+            cpuTimeP99
+            memoryUsageBytesP50
+            memoryUsageBytesP90
+            memoryUsageBytesP99
+          }
+        }
+      }
+    }
+  }`;
+
+  const response = await fetchWithTimeout(
+    "https://api.cloudflare.com/client/v4/graphql",
+    {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiToken}`,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: JSON.stringify({
+        query,
+        variables: {
+          accountTag,
+          datetimeStart: start.toISOString(),
+          datetimeEnd: end.toISOString(),
+          scriptName,
+        },
+      }),
+    },
+    HEALTH_PROBE_TIMEOUT_MS
+  );
+
+  const data = await response.json();
+  if (!response.ok || data?.errors?.length) {
+    throw new Error(data?.errors?.[0]?.message || `HTTP ${response.status}`);
+  }
+
+  const rows = data?.data?.viewer?.accounts?.[0]?.workersInvocationsAdaptive || [];
+  if (!rows.length) {
+    return { metrics: null };
+  }
+
+  const metrics = {
+    requests: rows.reduce((sum, row) => sum + Number(row?.sum?.requests || 0), 0),
+    errors: rows.reduce((sum, row) => sum + Number(row?.sum?.errors || 0), 0),
+    subrequests: rows.reduce((sum, row) => sum + Number(row?.sum?.subrequests || 0), 0),
+    cpuP50Us: percentileMedian(rows.map((row) => row?.quantiles?.cpuTimeP50)),
+    cpuP99Us: percentileMax(rows.map((row) => row?.quantiles?.cpuTimeP99)),
+    memoryP50: percentileMedian(rows.map((row) => row?.quantiles?.memoryUsageBytesP50)),
+    memoryP90: percentileMax(rows.map((row) => row?.quantiles?.memoryUsageBytesP90)),
+    memoryP99: percentileMax(rows.map((row) => row?.quantiles?.memoryUsageBytesP99)),
+  };
+
+  return { metrics };
+}
+
+function calculateHealthScore({ kvProbe, telegramProbe, catProbe, chanceProbe, aiOk, cron, cloudMetrics }) {
+  let score = 100;
+
+  if (!kvProbe?.ok) score -= 25;
+  if (!telegramProbe?.ok) score -= 30;
+  if (!catProbe?.ok) score -= 10;
+  if (!chanceProbe?.ok) score -= 5;
+  if (!aiOk) score -= 15;
+  if (cron?.status === "error") score -= 10;
+
+  if (kvProbe?.ok && kvProbe.ms > 500) score -= 4;
+  if (telegramProbe?.ok && telegramProbe.ms > 2000) score -= 5;
+  if (catProbe?.ok && catProbe.ms > 2500) score -= 3;
+
+  if (cloudMetrics?.ok) {
+    const m = cloudMetrics.metrics;
+    const memP90Pct = (Number(m.memoryP90 || 0) / WORKER_MEMORY_LIMIT_BYTES) * 100;
+    const cpuP99Ms = Number(m.cpuP99Us || 0) / 1000;
+    const errorRate = Number(m.requests || 0) > 0 ? Number(m.errors || 0) / Number(m.requests || 1) : 0;
+
+    if (memP90Pct >= 95) score -= 20;
+    else if (memP90Pct >= 80) score -= 10;
+    else if (memP90Pct >= 65) score -= 5;
+
+    if (cpuP99Ms > WORKER_FREE_CPU_LIMIT_MS) score -= 15;
+    else if (cpuP99Ms > WORKER_FREE_CPU_LIMIT_MS * 0.8) score -= 8;
+
+    if (errorRate >= 0.1) score -= 15;
+    else if (errorRate >= 0.03) score -= 8;
+    else if (errorRate > 0) score -= 3;
+  }
+
+  return Math.max(0, Math.min(100, Math.round(score)));
 }
 
 async function runScheduledDaily(cronInfo, env) {
@@ -2553,6 +3665,119 @@ async function handleHiddenEasterEgg(chatId, text, env) {
 
   if (exact("پنجه", "پنجه بده")) {
     await sendText(chatId, "نه. سگ نیستم.", env);
+    return true;
+  }
+
+  if (exact("موش", "موشه", "mouse")) {
+    await sendText(chatId, pickRandom(["کجا؟ آدرس دقیق بده.", "این یکی دیگه شوخی نیست. موش کو؟", "حرف حساب بالاخره."]), env);
+    await unlockAchievement(chatId, "mouse_radar", "رادار موش", env);
+    return true;
+  }
+
+  if (exact("جاروبرقی", "جارو برقی", "vacuum")) {
+    await sendText(chatId, "اون هیولای صداگنده رو خاموش کن بعد حرف بزن.", env);
+    await unlockAchievement(chatId, "vacuum_enemy", "دشمن طبیعی", env);
+    return true;
+  }
+
+  if (exact("حموم", "حمام", "آب", "آبتنی")) {
+    await sendText(chatId, pickRandom(["نه.", "بحثو عوض کن.", "من خودم تمیزم. تو برو حموم."]), env);
+    return true;
+  }
+
+  if (exact("بارون", "باران")) {
+    await sendText(chatId, "پنجه‌هام خیس شه مسئولش تویی.", env);
+    return true;
+  }
+
+  if (exact("گربه سیاه", "گربه مشکی")) {
+    await sendText(chatId, "بدشانسی نیست. فقط از بقیه شیک‌تره.", env);
+    return true;
+  }
+
+  if (exact("سبیل", "سبیلات")) {
+    await sendText(chatId, "دست نزن. تجهیزات ناوبریه.", env);
+    return true;
+  }
+
+  if (exact("دم", "دمت")) {
+    await sendText(chatId, "اون آنتن تعادله. مال دست زدن نیست.", env);
+    return true;
+  }
+
+  if (exact("مرغ", "مرغ بریون", "جوجه")) {
+    await sendText(chatId, pickRandom(["ادامه بده. گوشم با توئه.", "جمله‌ت بالاخره ارزش شنیدن پیدا کرد.", "لوکیشن مرغ رو بفرست، سریع."]), env);
+    return true;
+  }
+
+  if (exact("شیر")) {
+    await sendText(chatId, "شیرِ خوردنی یا اون یال‌داره؟ دقیق حرف بزن دوپا.", env);
+    return true;
+  }
+
+  if (exact("بیا بغلم", "بغل", "بغلم کن")) {
+    await sendText(chatId, pickRandom(["سه ثانیه. بیشترش مالیات داره.", "اول رضایت‌نامه پنجه‌ای امضا کن.", "نه… خب شاید. زیاد ذوق نکن."]), env);
+    return true;
+  }
+
+  if (exact("بوس", "بوس بده", "ماچ")) {
+    await sendText(chatId, "خیلی رو داری. نهایتاً یه هدبامپ؛ همونو غنیمت بدون.", env);
+    return true;
+  }
+
+  if (exact("پاشو", "بلند شو")) {
+    await sendText(chatId, "خودت دورم کار کن. من جای درست خوابیدم.", env);
+    return true;
+  }
+
+  if (exact("بخواب", "برو بخواب")) {
+    await sendText(chatId, "من روزی ۱۶ ساعت تمرین حرفه‌ای دارم. دخالت نکن.", env);
+    return true;
+  }
+
+  if (exact("sudo", "sudo su", "root")) {
+    await sendText(chatId, "دسترسی root فقط دست گربه‌ست. تو guest بمون.", env);
+    await unlockAchievement(chatId, "root_cat", "گربه روت", env);
+    return true;
+  }
+
+  if (exact("rm rf", "rm rf /", "rm -rf")) {
+    await sendText(chatId, "نه خیر. این دفعه حتی منم اون‌قدر شرور نیستم.", env);
+    return true;
+  }
+
+  if (exact("ctrl c", "کنترل سی")) {
+    await sendText(chatId, "فکر کردی با Ctrl+C می‌تونی منو متوقف کنی؟ ناز بود.", env);
+    return true;
+  }
+
+  if (exact("alt f4", "آلت اف فور")) {
+    await sendText(chatId, "خودت اول امتحانش کن. من نگاه می‌کنم 😼", env);
+    return true;
+  }
+
+  if (exact("ping", "پینگ")) {
+    await sendText(chatId, "pong. حالا برو یه کار مفیدتر بکن.", env);
+    return true;
+  }
+
+  if (exact("میم", "meme")) {
+    await sendText(chatId, "من خودم میمم. چرا واسطه می‌خوای؟", env);
+    return true;
+  }
+
+  if (exact("افسانه", "لجندری", "legendary")) {
+    await sendText(chatId, "بعضی گربه‌ها خیلی کم پیداشون می‌شه. بیشتر پیش‌پیش کن، شاید بختت باز شد.", env);
+    return true;
+  }
+
+  if (exact("اردک", "جوجه اردک")) {
+    await sendText(chatId, "اون اشتباه اداری هنوز تو پرونده‌م بازه. زیاد سؤال نکن.", env);
+    return true;
+  }
+
+  if (exact("کوچه", "خیابون", "خیابان")) {
+    await sendText(chatId, "قلمرو منه. آهسته رد شو و خوراکی بذار.", env);
     return true;
   }
 
