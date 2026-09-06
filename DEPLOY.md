@@ -81,7 +81,15 @@ button and points it to `/economy`.
 
 ## 7. Cron
 
-Configure Cloudflare Cron Triggers according to the Daily-cat schedule you want.
+Keep your existing Daily-cat Cron Trigger(s).
+
+Also add this dedicated mewMONEY! history trigger:
+
+```text
+*/15 * * * *
+```
+
+The Worker routes that exact expression to price-history collection only, so it does **not** send Daily cats every 15 minutes.
 
 The Worker already exports a `scheduled()` handler.
 
@@ -107,6 +115,8 @@ https://<YOUR_WORKER_HOST>/api/economy/health
 Price history is not backfilled. It starts accumulating after the new Worker runs and `/api/economy` receives successful price requests.
 
 Current behavior:
-- max one snapshot/source/15 minutes
+- automatic live collection every 15 minutes
+- one atomic batch snapshot for all successful sources
+- one BOT_KV history write per interval
 - retention 7 days
-- stored in BOT_KV
+- no stale-cache values are persisted

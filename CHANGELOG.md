@@ -1,10 +1,24 @@
 # Changelog
 
-این فایل تغییرات مهم گوربابات را از **ریپوی قبلی v2.1.2** تا Snapshot فعلی **v2.8.0** ثبت می‌کند.
+این فایل تغییرات مهم گوربابات را از **ریپوی قبلی v2.1.2** تا Snapshot فعلی **v2.8.1** ثبت می‌کند.
 
 > نکته: بعضی نسخه‌های میانی Release Note مستقل نداشتند. برای آن نسخه‌ها، این Changelog بر اساس Source Snapshotهای همان Release و Diffهای موجود جمع‌بندی شده است.
 
 ---
+
+## [v2.8.1]
+
+### Scheduled History
+- History از حالت demand-driven خارج شد.
+- Cron اختصاصی `*/15 * * * *`.
+- Sourceها مستقیم و Live Fetch می‌شوند؛ Stale cache وارد History نمی‌شود.
+- TGJU + Milli + MelliGold + TalaSea + Smart average در یک Snapshot هم‌زمان.
+- Storage به `economy:history:v2:all` منتقل شد.
+- فقط یک KV Write در هر 15 دقیقه برای کل History.
+- `/api/economy` دیگر History را Persist نمی‌کند.
+- v1 history برای Migration تا پایان Retention خوانده می‌شود.
+- Cron 15 دقیقه‌ای Daily cat ارسال نمی‌کند.
+
 
 ## [v2.8.0]
 

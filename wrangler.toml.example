@@ -22,3 +22,10 @@ CF_WORKER_NAME = "gorbabat"
 # Add the Cron expressions you actually want:
 # [triggers]
 # crons = ["0 8 * * *", "0 20 * * *"]
+
+
+# Required for mewMONEY! automatic history:
+# Add "*/15 * * * *" alongside your existing Daily cron expression(s).
+# Example only:
+# [triggers]
+# crons = ["*/15 * * * *", "<YOUR_EXISTING_DAILY_CRON>"]

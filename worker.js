@@ -49,7 +49,9 @@ const TELEGRAM_REQUEST_TIMEOUT_MS = 8000;
 const ECONOMY_REQUEST_TIMEOUT_MS = 5500;
 const ECONOMY_DEFAULT_CACHE_SECONDS = 120;
 const ECONOMY_STALE_CACHE_SECONDS = 6 * 60 * 60;
-const ECONOMY_HISTORY_KEY_PREFIX = "economy:history:v1:";
+const ECONOMY_HISTORY_KEY_PREFIX = "economy:history:v1:"; // legacy read-only history
+const ECONOMY_HISTORY_BATCH_KEY = "economy:history:v2:all";
+const ECONOMY_HISTORY_CRON = "*/15 * * * *";
 const ECONOMY_HISTORY_BUCKET_MS = 15 * 60 * 1000;
 const ECONOMY_HISTORY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const ECONOMY_HISTORY_TTL_SECONDS = 8 * 24 * 60 * 60;
@@ -67,7 +69,7 @@ const HEALTH_CF_WINDOW_MINUTES = 15;
 const HEALTH_CF_FALLBACK_WINDOWS_MINUTES = [15, 60, 360, 1440];
 const HEALTH_CF_AGGREGATION_LAG_MINUTES = 3;
 const HEALTH_KV_COUNT_MAX_PAGES = 4;
-const APP_USER_AGENT = "gorbabat/2.8.0 (+https://github.com/modamires/gorbabat)";
+const APP_USER_AGENT = "gorbabat/2.8.1 (+https://github.com/modamires/gorbabat)";
 
 const catBurstMemory = new Map();
 const partialPishMemory = new Map();
@@ -496,6 +498,13 @@ export default {
             id: source.id,
             name: source.name,
           })),
+          history: {
+            mode: "scheduled",
+            cron: ECONOMY_HISTORY_CRON,
+            intervalMinutes: 15,
+            retentionDays: 7,
+            storage: "BOT_KV",
+          },
           cacheSeconds: getEconomyCacheSeconds(env),
         }),
         {
@@ -573,11 +582,28 @@ export default {
       startedAt: new Date().toISOString(),
     };
 
-    console.log("CRON STARTED", JSON.stringify(cronInfo));
+    const isEconomyHistoryCron =
+      String(cronInfo.cron) === ECONOMY_HISTORY_CRON;
+
+    console.log(
+      isEconomyHistoryCron
+        ? "ECONOMY HISTORY CRON STARTED"
+        : "DAILY CRON STARTED",
+      JSON.stringify(cronInfo)
+    );
+
+    const task = isEconomyHistoryCron
+      ? runScheduledEconomyHistory(cronInfo, env)
+      : runScheduledDaily(cronInfo, env);
 
     ctx.waitUntil(
-      runScheduledDaily(cronInfo, env).catch((error) => {
-        logDetailedError("scheduled", error);
+      task.catch((error) => {
+        logDetailedError(
+          isEconomyHistoryCron
+            ? "scheduled economy history"
+            : "scheduled daily",
+          error
+        );
       })
     );
   },
@@ -2990,6 +3016,31 @@ function parseEconomyHistoryStore(raw) {
   }
 }
 
+function parseEconomyHistoryBatchStore(raw) {
+  if (!raw) {
+    return {
+      version: 2,
+      snapshots: [],
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+
+    return {
+      version: 2,
+      snapshots: Array.isArray(parsed?.snapshots)
+        ? parsed.snapshots
+        : [],
+    };
+  } catch {
+    return {
+      version: 2,
+      snapshots: [],
+    };
+  }
+}
+
 function sanitizeEconomyHistoryAssets(assets) {
   const result = {};
 
@@ -3007,6 +3058,17 @@ function sanitizeEconomyHistoryAssets(assets) {
   return result;
 }
 
+function economyHistoryCurrentBucket(timestamp = Date.now()) {
+  return Math.floor(
+    Number(timestamp) / ECONOMY_HISTORY_BUCKET_MS
+  );
+}
+
+/*
+ * Legacy v1 writer.
+ * Kept only for compatibility/tests and old stored history format.
+ * The live /api/economy route no longer calls it.
+ */
 async function recordEconomyHistorySnapshot(sourceId, assets, env) {
   if (!env?.BOT_KV || !economyHistorySourceSupported(sourceId)) {
     return false;
@@ -3018,9 +3080,7 @@ async function recordEconomyHistorySnapshot(sourceId, assets, env) {
   }
 
   const now = Date.now();
-  const currentBucket = Math.floor(
-    now / ECONOMY_HISTORY_BUCKET_MS
-  );
+  const currentBucket = economyHistoryCurrentBucket(now);
   const key = economyHistoryKey(sourceId);
   const raw = await safeKvGet(env.BOT_KV, key, "");
   const store = parseEconomyHistoryStore(raw);
@@ -3037,10 +3097,9 @@ async function recordEconomyHistorySnapshot(sourceId, assets, env) {
 
   const last = snapshots[snapshots.length - 1];
   const lastBucket = last
-    ? Math.floor(Number(last.t) / ECONOMY_HISTORY_BUCKET_MS)
+    ? economyHistoryCurrentBucket(last.t)
     : null;
 
-  // One compact KV write per source per 15-minute bucket.
   if (lastBucket === currentBucket) {
     return false;
   }
@@ -3068,6 +3127,191 @@ async function recordEconomyHistorySnapshot(sourceId, assets, env) {
   );
 }
 
+async function recordEconomyHistoryBatchSnapshot(
+  sourceAssets,
+  env,
+  options = {}
+) {
+  if (!env?.BOT_KV) {
+    return {
+      written: false,
+      reason: "BOT_KV missing",
+      sourceCount: 0,
+    };
+  }
+
+  const cleanSources = {};
+
+  for (const [sourceId, assets] of Object.entries(sourceAssets || {})) {
+    if (!economyHistorySourceSupported(sourceId)) {
+      continue;
+    }
+
+    const cleanAssets = sanitizeEconomyHistoryAssets(assets);
+
+    if (Object.keys(cleanAssets).length) {
+      cleanSources[sourceId] = cleanAssets;
+    }
+  }
+
+  const sourceIds = Object.keys(cleanSources);
+
+  if (!sourceIds.length) {
+    return {
+      written: false,
+      reason: "no valid live source data",
+      sourceCount: 0,
+    };
+  }
+
+  const now = Number(options.timestamp) || Date.now();
+  const currentBucket = economyHistoryCurrentBucket(now);
+  const raw = await safeKvGet(
+    env.BOT_KV,
+    ECONOMY_HISTORY_BATCH_KEY,
+    ""
+  );
+  const store = parseEconomyHistoryBatchStore(raw);
+  const cutoff = now - ECONOMY_HISTORY_RETENTION_MS;
+
+  let snapshots = (store.snapshots || [])
+    .filter((snapshot) =>
+      Number.isFinite(Number(snapshot?.t)) &&
+      Number(snapshot.t) >= cutoff &&
+      snapshot?.sources &&
+      typeof snapshot.sources === "object"
+    )
+    .sort((a, b) => Number(a.t) - Number(b.t));
+
+  const last = snapshots[snapshots.length - 1];
+  const lastBucket = last
+    ? economyHistoryCurrentBucket(last.t)
+    : null;
+
+  if (lastBucket === currentBucket) {
+    return {
+      written: false,
+      reason: "bucket already recorded",
+      sourceCount: Object.keys(last?.sources || {}).length,
+      timestamp: Number(last?.t) || now,
+    };
+  }
+
+  snapshots.push({
+    t: now,
+    sources: cleanSources,
+  });
+
+  if (snapshots.length > ECONOMY_HISTORY_MAX_SNAPSHOTS) {
+    snapshots = snapshots.slice(
+      -ECONOMY_HISTORY_MAX_SNAPSHOTS
+    );
+  }
+
+  const written = await safeKvPut(
+    env.BOT_KV,
+    ECONOMY_HISTORY_BATCH_KEY,
+    JSON.stringify({
+      version: 2,
+      intervalMinutes: 15,
+      retentionDays: 7,
+      snapshots,
+    }),
+    { expirationTtl: ECONOMY_HISTORY_TTL_SECONDS }
+  );
+
+  return {
+    written: Boolean(written),
+    reason: written ? "stored" : "KV write failed",
+    sourceCount: sourceIds.length,
+    timestamp: now,
+    snapshotCount: snapshots.length,
+  };
+}
+
+function mergeEconomyHistoryPoints(...groups) {
+  const byBucket = new Map();
+  const cutoff = Date.now() - ECONOMY_HISTORY_RETENTION_MS;
+
+  for (const group of groups) {
+    for (const point of group || []) {
+      const t = Number(point?.t);
+      const price = Number(point?.price);
+
+      if (
+        !Number.isFinite(t) ||
+        t < cutoff ||
+        !Number.isFinite(price) ||
+        price <= 0
+      ) {
+        continue;
+      }
+
+      const bucket = economyHistoryCurrentBucket(t);
+
+      // Later groups win. v2 is passed after v1, so scheduled history
+      // overrides any legacy demand-driven point in the same bucket.
+      byBucket.set(bucket, { t, price });
+    }
+  }
+
+  return [...byBucket.values()]
+    .sort((a, b) => a.t - b.t)
+    .slice(-ECONOMY_HISTORY_MAX_SNAPSHOTS);
+}
+
+async function getEconomyHistoryV1(sourceId, assetId, env) {
+  const raw = await safeKvGet(
+    env.BOT_KV,
+    economyHistoryKey(sourceId),
+    ""
+  );
+  const store = parseEconomyHistoryStore(raw);
+  const points = [];
+
+  for (const snapshot of store.snapshots || []) {
+    const t = Number(snapshot?.t);
+    const price = Number(snapshot?.assets?.[assetId]);
+
+    if (
+      Number.isFinite(t) &&
+      Number.isFinite(price) &&
+      price > 0
+    ) {
+      points.push({ t, price });
+    }
+  }
+
+  return points;
+}
+
+async function getEconomyHistoryV2(sourceId, assetId, env) {
+  const raw = await safeKvGet(
+    env.BOT_KV,
+    ECONOMY_HISTORY_BATCH_KEY,
+    ""
+  );
+  const store = parseEconomyHistoryBatchStore(raw);
+  const points = [];
+
+  for (const snapshot of store.snapshots || []) {
+    const t = Number(snapshot?.t);
+    const price = Number(
+      snapshot?.sources?.[sourceId]?.[assetId]
+    );
+
+    if (
+      Number.isFinite(t) &&
+      Number.isFinite(price) &&
+      price > 0
+    ) {
+      points.push({ t, price });
+    }
+  }
+
+  return points;
+}
+
 async function getEconomyHistory(sourceId, assetId, env) {
   const definition = economyAssetById(assetId);
 
@@ -3079,37 +3323,156 @@ async function getEconomyHistory(sourceId, assetId, env) {
     return [];
   }
 
-  const raw = await safeKvGet(
-    env.BOT_KV,
-    economyHistoryKey(sourceId),
-    ""
+  const [legacyPoints, scheduledPoints] = await Promise.all([
+    getEconomyHistoryV1(sourceId, assetId, env),
+    getEconomyHistoryV2(sourceId, assetId, env),
+  ]);
+
+  return mergeEconomyHistoryPoints(
+    legacyPoints,
+    scheduledPoints
   );
-  const store = parseEconomyHistoryStore(raw);
-  const cutoff = Date.now() - ECONOMY_HISTORY_RETENTION_MS;
-  const byBucket = new Map();
+}
 
-  for (const snapshot of store.snapshots || []) {
-    const t = Number(snapshot?.t);
-    const price = Number(snapshot?.assets?.[assetId]);
+async function fetchEconomyHistoryLiveSources(env) {
+  const coreResults = await mapWithConcurrency(
+    ECONOMY_SOURCE_REGISTRY,
+    1,
+    async (source) => {
+      try {
+        const data = await fetchEconomySourceDirect(
+          source.id,
+          env
+        );
 
-    if (
-      !Number.isFinite(t) ||
-      t < cutoff ||
-      !Number.isFinite(price) ||
-      price <= 0
-    ) {
-      continue;
+        return {
+          id: source.id,
+          ok: true,
+          data: {
+            ...data,
+            stale: false,
+            cacheHit: false,
+          },
+        };
+      } catch (error) {
+        logDetailedError(
+          `history live source ${source.id}`,
+          error
+        );
+
+        return {
+          id: source.id,
+          ok: false,
+          error: error?.message || String(error),
+        };
+      }
     }
+  );
 
-    const bucket = Math.floor(
-      t / ECONOMY_HISTORY_BUCKET_MS
-    );
-    byBucket.set(bucket, { t, price });
+  const goldResults = await mapWithConcurrency(
+    ECONOMY_GOLD_REFERENCE_REGISTRY,
+    2,
+    async (source) => {
+      try {
+        const data = await fetchGoldReferenceSource(
+          source.id
+        );
+
+        return {
+          id: source.id,
+          ok: true,
+          data: {
+            ...data,
+            stale: false,
+            cacheHit: false,
+          },
+        };
+      } catch (error) {
+        logDetailedError(
+          `history live gold source ${source.id}`,
+          error
+        );
+
+        return {
+          id: source.id,
+          ok: false,
+          referenceOnly: true,
+          error: error?.message || String(error),
+        };
+      }
+    }
+  );
+
+  return [...coreResults, ...goldResults];
+}
+
+async function runScheduledEconomyHistory(cronInfo, env) {
+  const startedAt = Date.now();
+  const sourceResults = await fetchEconomyHistoryLiveSources(
+    env
+  );
+  const sourceAssets = {};
+  const failures = [];
+
+  for (const result of sourceResults) {
+    if (
+      result.ok &&
+      Array.isArray(result.data?.assets) &&
+      result.data.assets.length
+    ) {
+      sourceAssets[result.id] = result.data.assets;
+    } else {
+      failures.push({
+        id: result.id,
+        error: String(
+          result.error || "no live assets"
+        ).slice(0, 160),
+      });
+    }
   }
 
-  return [...byBucket.values()]
-    .sort((a, b) => a.t - b.t)
-    .slice(-ECONOMY_HISTORY_MAX_SNAPSHOTS);
+  const average = aggregateEconomySources(sourceResults);
+
+  if (
+    average?.ok &&
+    Array.isArray(average.assets) &&
+    average.assets.length
+  ) {
+    sourceAssets.average = average.assets;
+  }
+
+  const storeResult =
+    await recordEconomyHistoryBatchSnapshot(
+      sourceAssets,
+      env,
+      {
+        timestamp:
+          Number(cronInfo?.scheduledTime) ||
+          Date.now(),
+      }
+    );
+
+  const stats = {
+    cron: cronInfo?.cron || ECONOMY_HISTORY_CRON,
+    durationMs: Date.now() - startedAt,
+    requestedSourceCount:
+      ECONOMY_SOURCE_REGISTRY.length +
+      ECONOMY_GOLD_REFERENCE_REGISTRY.length,
+    liveSourceCount: Object.keys(sourceAssets).filter(
+      (id) => id !== "average"
+    ).length,
+    averageStored: Boolean(sourceAssets.average),
+    failedSourceCount: failures.length,
+    failures,
+    historyWrite: storeResult,
+  };
+
+  console.log(
+    "ECONOMY HISTORY CRON FINISHED",
+    JSON.stringify(stats)
+  );
+
+  return stats;
 }
 
 async function serveEconomyHistoryApi(request, env) {
@@ -3160,6 +3523,8 @@ async function serveEconomyHistoryApi(request, env) {
       unit: definition.unit,
       retentionDays: 7,
       intervalMinutes: 15,
+      collectionMode: "scheduled",
+      cron: ECONOMY_HISTORY_CRON,
       points,
     }),
     {
@@ -3247,22 +3612,6 @@ async function serveEconomyApi(request, env, ctx) {
           excludedSources: [],
         })),
       };
-    }
-
-    const historyTask = recordEconomyHistorySnapshot(
-      requestedSource,
-      payload.assets || [],
-      env
-    );
-
-    if (ctx?.waitUntil) {
-      ctx.waitUntil(
-        historyTask.catch((error) =>
-          logDetailedError(`economy history ${requestedSource}`, error)
-        )
-      );
-    } else {
-      await historyTask;
     }
 
     return new Response(JSON.stringify(payload), {
@@ -4046,7 +4395,7 @@ function serveEconomyMiniApp(env) {
         if (points.length < 2) {
           chartStage.innerHTML =
             '<div class="chartState">'
-            + 'History is building for this source. mewMONEY! stores one market snapshot about every 15 minutes when prices are requested.<br><br>'
+            + 'History is building for this source. mewMONEY! records a live market snapshot automatically every 15 minutes.<br><br>'
             + 'Come back after a few price updates.'
             + '</div>';
 
@@ -5833,43 +6182,89 @@ async function handleTestDaily(adminChatId, env) {
 }
 
 async function handleCronStatus(adminChatId, env) {
-  const raw = await safeKvGet(env.BOT_KV, CRON_LAST_KEY, null);
+  const [dailyRaw, historyRaw] = await Promise.all([
+    safeKvGet(env.BOT_KV, CRON_LAST_KEY, null),
+    safeKvGet(
+      env.BOT_KV,
+      ECONOMY_HISTORY_BATCH_KEY,
+      null
+    ),
+  ]);
 
-  if (!raw) {
-    await sendText(
-      adminChatId,
-      "هنوز هیچ اجرای Cron داخل ربات ثبت نشده. اگر Trigger ساخته‌ای ولی این پیام را می‌بینی، Cron هنوز Worker را اجرا نکرده.",
-      env
-    );
-    return;
-  }
+  const lines = ["آخرین وضعیت Cronها:"];
 
-  let data;
+  if (dailyRaw) {
+    let daily;
 
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    data = { raw };
-  }
+    try {
+      daily = JSON.parse(dailyRaw);
+    } catch {
+      daily = { raw: dailyRaw };
+    }
 
-  const lines = [
-    "آخرین وضعیت Cron:",
-    `status: ${data.status || "unknown"}`,
-    `cron: ${data.cron || "unknown"}`,
-    `startedAt: ${data.startedAt || "unknown"}`,
-    `finishedAt: ${data.finishedAt || "-"}`,
-  ];
-
-  if (data.stats) {
     lines.push(
-      `recipients: ${data.stats.recipients ?? "-"}`,
-      `sent: ${data.stats.sent ?? "-"}`,
-      `failed: ${data.stats.failed ?? "-"}`,
-      `removed: ${data.stats.removed ?? "-"}`
+      "",
+      "🔔 Daily:",
+      `status: ${daily.status || "unknown"}`,
+      `cron: ${daily.cron || "unknown"}`,
+      `startedAt: ${daily.startedAt || "unknown"}`,
+      `finishedAt: ${daily.finishedAt || "-"}`
+    );
+
+    if (daily.stats) {
+      lines.push(
+        `recipients: ${daily.stats.recipients ?? "-"}`,
+        `sent: ${daily.stats.sent ?? "-"}`,
+        `failed: ${daily.stats.failed ?? "-"}`,
+        `removed: ${daily.stats.removed ?? "-"}`
+      );
+    }
+  } else {
+    lines.push(
+      "",
+      "🔔 Daily:",
+      "هنوز اجرای Daily ثبت نشده."
     );
   }
 
-  await sendText(adminChatId, lines.join("\n"), env);
+  lines.push(
+    "",
+    "📈 mewMONEY! history:",
+    `cron: ${ECONOMY_HISTORY_CRON}`
+  );
+
+  if (historyRaw) {
+    const store =
+      parseEconomyHistoryBatchStore(historyRaw);
+    const last =
+      store.snapshots?.[store.snapshots.length - 1];
+
+    lines.push(
+      `snapshots: ${store.snapshots?.length || 0}`,
+      `lastSnapshot: ${
+        last?.t
+          ? new Date(Number(last.t)).toISOString()
+          : "-"
+      }`,
+      `sources: ${
+        last?.sources
+          ? Object.keys(last.sources).join(", ")
+          : "-"
+      }`
+    );
+  } else {
+    lines.push(
+      "history: هنوز Snapshot زمان‌بندی‌شده ثبت نشده.",
+      "Cloudflare Cron Trigger زیر را اضافه کن:",
+      ECONOMY_HISTORY_CRON
+    );
+  }
+
+  await sendText(
+    adminChatId,
+    lines.join("\n"),
+    env
+  );
 }
 
 async function handleHealth(adminChatId, env) {
@@ -5948,7 +6343,7 @@ async function handleHealth(adminChatId, env) {
   const statusWord = localScore >= 90 ? "سالم" : localScore >= 70 ? "قابل قبول" : localScore >= 50 ? "مشکوک" : "خراب‌کاری در جریانه";
 
   const lines = [
-    `🩺 Health Report — v2.8.0`,
+    `🩺 Health Report — v2.8.1`,
     ``,
     `${scoreEmoji} سلامت کلی: ${localScore}/100 — ${statusWord}`,
     healthBar(localScore),
