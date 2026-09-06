@@ -1,0 +1,12 @@
+node --check: PASS
+History snapshot write: PASS
+15-minute source throttle: PASS
+TGJU history: PASS
+Gold-only source history: PASS
+Smart-average history: PASS
+History API validation: PASS
+Three-dot button markup: PASS
+24H/7D chart controls: PASS
+Chart-button vs paw/tap isolation: PASS
+10-tap easter egg preserved: PASS
+Paw animation preserved: PASS

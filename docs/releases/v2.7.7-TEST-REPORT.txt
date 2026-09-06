@@ -1,0 +1,5 @@
+node --check: PASS
+Menu button label `mewMONEY!`: PASS
+Invisible menu label removed: PASS
+Mini App page brand preserved: PASS
+Persian bot brand preserved: PASS

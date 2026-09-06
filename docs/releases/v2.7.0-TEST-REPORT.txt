@@ -1,0 +1,20 @@
+node --check: PASS
+dynamic pure-function tests: PASS
+economy numeric normalization: PASS
+TGJU Rial→Toman fixture: PASS
+gold sanity ratio validation: PASS
+robust consensus/outlier test: PASS
+two-source conflict test: PASS
+null change regression: PASS
+stale-source visibility test: PASS
+webhook await-routing test: PASS
+KV PUT retry test: PASS
+KV DELETE retry test: PASS
+Mini App English-visible-text audit: PASS
+paw animation presence: PASS
+browser fetch timeout presence: PASS
+direct server fetch audit: PASS
+direct KV operation audit: PASS
+reply keyboard economy-button audit: PASS
+broadcast in-isolate lock: PRESENT
+daily Telegram concurrency cap: 6

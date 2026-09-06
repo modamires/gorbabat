@@ -1,0 +1,8 @@
+node --check: PASS
+10-second recovery delay: PASS
+1.2-second upward count animation: PASS
+Discount reset to raw price: PASS
+Queued discount/recovery sequencing: PASS
+Recovery timer restart on new milestone: PASS
+Chart feature preserved: PASS
+Multi-paw feature preserved: PASS

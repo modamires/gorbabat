@@ -1,0 +1,8 @@
+node --check: PASS
+Tasnim removal audit: PASS
+USDT TGJU rial-price parser: PASS
+USDT IRR->Toman conversion: PASS
+USDT global-1USD regression guard: PASS
+USD regression conversion: PASS
+Source selector audit: PASS
+Display-order audit: PASS

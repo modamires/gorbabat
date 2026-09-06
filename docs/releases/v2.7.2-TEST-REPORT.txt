@@ -1,0 +1,13 @@
+node --check: PASS
+Milli IRR->Toman parser fixture: PASS
+Milli live-feed parser fixture: PASS
+MelliGold GOLD18 parser fixture: PASS
+TalaSea GOLD18 parser fixture: PASS
+Gold reference outlier filtering test: PASS
+Core-source count isolation test: PASS
+Jalali/Persian-calendar test: PASS
+Sahrivar Finglish month test: PASS
+Subtitle-only RTL audit: PASS
+Multi-paw no-kill audit: PASS
+Paw 46px upward-motion audit: PASS
+Visible Persian audit: PASS

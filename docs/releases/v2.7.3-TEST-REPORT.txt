@@ -1,0 +1,10 @@
+node --check: PASS
+Brand rename test: PASS
+Shahrivar correction test: PASS
+Jalali 1405 / Shahrivar runtime test: PASS
+Selectable Milli source test: PASS
+Selectable MelliGold source test: PASS
+Selectable TalaSea source test: PASS
+Selector order/default test: PASS
+Gold reference definition test: PASS
+Visible Persian audit: PASS

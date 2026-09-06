@@ -1,0 +1,9 @@
+node --check: PASS
+Tasnim gold/coin fixture: PASS
+Tasnim USD/EUR/AED current-report fixture: PASS
+Tasnim Brent fixture: PASS
+Default source TGJU: PASS
+Smart average selectable: PASS
+Official-vs-free-market FX guard: PASS
+English/Gregorian Mini App audit: PASS
+Only TGJU/Tasnim source audit: PASS

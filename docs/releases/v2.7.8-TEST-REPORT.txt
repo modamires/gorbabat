@@ -1,0 +1,10 @@
+node --check: PASS
+Exact mewMONEY! page brand: PASS
+Menu-button brand preserved: PASS
+10-tap threshold: PASS
+10,000 Toman decrement: PASS
+Animated countdown: PASS
+Queued multi-step decrement: PASS
+Zero floor: PASS
+Per-source/per-card state: PASS
+Multi-paw behavior preserved: PASS
