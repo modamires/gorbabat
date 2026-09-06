@@ -3,8 +3,6 @@
 گوربابات یک ربات تلگرام فارسی با شخصیت گربه‌ای است که روی **Cloudflare Workers** اجرا می‌شود و از **Telegram Bot API، Workers AI و Cloudflare KV** استفاده می‌کند.
 
 https://t.me/gorbabat_bot
-https://t.me/gorbabat_bot
-https://t.me/gorbabat_bot
 
 این Repository Snapshot نسخه‌ی کامل **v2.8.0** است و تمام تغییرات مهمی را که بعد از ریپوی قبلی **v2.1.2** تا این نسخه انجام شده، در `CHANGELOG.md` و `MIGRATION-v2.1.2-to-v2.8.0.md` ثبت می‌کند.
 
@@ -256,5 +254,4 @@ Cloudflare Worker
 جزئیات کامل Deploy و Bindingها در `DEPLOY.md` و `CONFIG.md` است.
 
 https://t.me/gorbabat_bot
-https://t.me/gorbabat_bot
-https://t.me/gorbabat_bot
+
